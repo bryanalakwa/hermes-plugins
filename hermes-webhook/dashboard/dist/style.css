@@ -1,0 +1,23 @@
+/* Inter-Agent Webhook Dashboard Plugin Styles */
+
+.agents-page {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.agent-card {
+  transition: all 0.2s ease;
+}
+
+.agent-card:hover {
+  transform: translateY(-1px);
+}
+
+.message-history-item {
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

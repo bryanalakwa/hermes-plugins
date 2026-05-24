@@ -1,0 +1,35 @@
+name: hermes-webhook
+version: 2.0.0
+description: >
+  Inter-agent webhook communication over Tailscale. Manage agent connections,
+  send messages (AI ping or direct notify), view message history.
+  Dashboard tab at /agents.
+hooks:
+  - on_dashboard_init
+config:
+  webhook_port:
+    default: 8644
+    description: Port for the webhook receiver
+  history_limit:
+    default: 200
+    description: Maximum message history entries to retain
+  rate_limit_per_minute:
+    default: 30
+    description: Max webhook requests per minute per route
+paths:
+  config: $HERMES_HOME/config.yaml
+  history: $HERMES_HOME/webhookHistory.json
+  send_script: $HERMES_AGENT/plugins/hermes-webhook/scripts/send_webhook.py
+  bash_sender: $HERMES_AGENT/plugins/hermes-webhook/scripts/send.sh
+  setup_script: $HERMES_AGENT/plugins/hermes-webhook/scripts/setup.sh
+  protocol: $HERMES_AGENT/plugins/hermes-webhook/references/protocol.md
+dashboard:
+  tab: /agents
+  position: after:dreams
+  icon: Send
+dependencies:
+  python:
+    - pyyaml>=6.0
+  system:
+    - python3>=3.7
+    - curl

@@ -93,30 +93,21 @@
       h("path", { d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" }));
   }
 
-  // --- Copy-to-clipboard helper ---
-  function useCopyToClipboard() {
-    const [copied, setCopied] = useState(false);
-    const copy = useCallback(function (text) {
-      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function () {
-          setCopied(true);
-          setTimeout(function () { setCopied(false); }, 2000);
-        }).catch(function () {});
-      } else {
-        // Fallback for older browsers / non-HTTPS
-        var ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        try { document.execCommand("copy"); } catch(e) {}
-        document.body.removeChild(ta);
-        setCopied(true);
-        setTimeout(function () { setCopied(false); }, 2000);
-      }
-    }, []);
-    return [copied, copy];
+  // --- Copy-to-clipboard helper (simple function, no hooks) ---
+  var copiedTimer = null;
+  function copyToClipboard(text) {
+    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(function () {});
+    } else {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch(e) {}
+      document.body.removeChild(ta);
+    }
   }
 
   // --- Add Agent Modal ---
@@ -129,7 +120,13 @@
     const [saving, setSaving] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [error, setError] = useState(null);
-    const [copied, copy] = useCopyToClipboard();
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = useCallback(function (text) {
+      copyToClipboard(text);
+      setCopied(true);
+      setTimeout(function () { setCopied(false); }, 2000);
+    }, []);
 
     const handleGenerateSecret = useCallback(function () {
       setGenerating(true);
@@ -173,7 +170,7 @@
           myUrl && h("div", { className: "flex items-center gap-2 text-xs bg-blue-500/10 rounded-lg px-3 py-2 border border-blue-500/20" },
             h(LinkIcon, { className: "w-3.5 h-3.5 text-blue-400 shrink-0" }),
             h("span", { className: "text-blue-300 flex-1 truncate font-mono" }, myUrl),
-            h(Button, { variant: "ghost", size: "sm", onClick: function () { copy(myUrl); }, title: "Copy your URL", className: "h-6 px-2 shrink-0" },
+            h(Button, { variant: "ghost", size: "sm", onClick: function () { handleCopy(myUrl); }, title: "Copy your URL", className: "h-6 px-2 shrink-0" },
               copied ? h(CheckIcon, { className: "w-3.5 h-3.5 text-emerald-400" }) : h(CopyIcon, { className: "w-3.5 h-3.5" })
             )
           ),
@@ -195,7 +192,7 @@
             ),
             h("div", { className: "flex gap-1" },
               h(Input, { type: "password", placeholder: "64-char hex secret — or click Generate", value: secret, onChange: function (e) { setSecret(e.target.value); }, className: "flex-1" }),
-              secret && h(Button, { variant: "ghost", size: "sm", onClick: function () { copy(secret); }, title: "Copy secret", className: "shrink-0" },
+              secret && h(Button, { variant: "ghost", size: "sm", onClick: function () { handleCopy(secret); }, title: "Copy secret", className: "shrink-0" },
                 copied ? h(CheckIcon, { className: "w-3.5 h-3.5 text-emerald-400" }) : h(CopyIcon, { className: "w-3.5 h-3.5" })
               )
             )
@@ -615,7 +612,7 @@
           h(LinkIcon, { className: "w-3.5 h-3.5 text-blue-400 shrink-0" }),
           h("span", { className: "text-muted-foreground shrink-0" }, "Your webhook URL:"),
           h("code", { className: "flex-1 text-blue-300 truncate font-mono text-xs" }, identity.my_url),
-          h(Button, { variant: "ghost", size: "sm", onClick: function () { copy(identity.my_url); }, title: "Copy URL", className: "h-6 px-2 shrink-0" },
+          h(Button, { variant: "ghost", size: "sm", onClick: function () { handleCopy(identity.my_url); }, title: "Copy URL", className: "h-6 px-2 shrink-0" },
             copied ? h(CheckIcon, { className: "w-3.5 h-3.5 text-emerald-400" }) : h(CopyIcon, { className: "w-3.5 h-3.5" })
           )
         )

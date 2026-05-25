@@ -1,0 +1,14 @@
+{
+  "name": "hermes-dream-engine",
+  "label": "Dream Engine",
+  "description": "Autonomous event-driven dreaming engine — 5-state sleep detection (Active → Idle → Dormant → Hypnagogic → Dreaming). Memory consolidation, problem re-evaluation, free association.",
+  "icon": "Moon",
+  "version": "1.0.0",
+  "tab": {
+    "path": "/dream-engine",
+    "position": "after:hermes-dreaming"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

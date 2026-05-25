@@ -451,11 +451,26 @@ async def get_identity():
 
     return {
         "my_name": section.get("my_name", "Agent"),
+        "my_url": section.get("my_url", ""),
         "webhook_enabled": webhook_enabled,
         "webhook_port": webhook_port,
         "routes": list(routes.keys()),
         "receiver_count": len(section.get("receivers", {})),
     }
+
+
+# ── API: Generate a secure webhook secret ──────────────────
+
+@router.get("/generate-secret")
+async def generate_secret():
+    """Generate a cryptographically secure 64-char hex HMAC secret.
+
+    Uses os.urandom (CSPRNG) — suitable for production use.
+    Returns the secret once; the caller must store it.
+    """
+    import secrets
+    secret = secrets.token_hex(32)  # 32 bytes = 64 hex chars
+    return {"secret": secret}
 
 
 # ── API: Test connection ───────────────────────────────────

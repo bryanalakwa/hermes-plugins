@@ -82,16 +82,62 @@
     return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
       h("path", { d: "m15 18-6-6 6-6" }));
   }
+  function CopyIcon(props) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+      h("rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2" }),
+      h("path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }));
+  }
+  function LinkIcon(props) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+      h("path", { d: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" }),
+      h("path", { d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" }));
+  }
+
+  // --- Copy-to-clipboard helper ---
+  function useCopyToClipboard() {
+    const [copied, setCopied] = useState(false);
+    const copy = useCallback(function (text) {
+      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          setCopied(true);
+          setTimeout(function () { setCopied(false); }, 2000);
+        }).catch(function () {});
+      } else {
+        // Fallback for older browsers / non-HTTPS
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); } catch(e) {}
+        document.body.removeChild(ta);
+        setCopied(true);
+        setTimeout(function () { setCopied(false); }, 2000);
+      }
+    }, []);
+    return [copied, copy];
+  }
 
   // --- Add Agent Modal ---
-  function AddAgentModal({ onSave, onClose }) {
+  function AddAgentModal({ onSave, onClose, myUrl }) {
     const [nick, setNick] = useState("");
     const [url, setUrl] = useState("");
     const [secret, setSecret] = useState("");
     const [routePing, setRoutePing] = useState("agent-ping");
     const [routeNotify, setRouteNotify] = useState("agent-notify");
     const [saving, setSaving] = useState(false);
+    const [generating, setGenerating] = useState(false);
     const [error, setError] = useState(null);
+    const [copied, copy] = useCopyToClipboard();
+
+    const handleGenerateSecret = useCallback(function () {
+      setGenerating(true);
+      api("/generate-secret")
+        .then(function (r) { setSecret(r.secret || ""); })
+        .catch(function () { setError("Failed to generate secret"); })
+        .finally(function () { setGenerating(false); });
+    }, []);
 
     const handleSave = useCallback(function () {
       if (!nick.trim() || !url.trim() || !secret.trim()) {
@@ -123,6 +169,15 @@
         h(CardContent, { className: "space-y-4" },
           error && h("div", { className: "text-xs text-red-400 bg-red-500/10 rounded p-2" }, "⚠ " + error),
 
+          // Show host URL for easy copying — share this with the remote agent
+          myUrl && h("div", { className: "flex items-center gap-2 text-xs bg-blue-500/10 rounded-lg px-3 py-2 border border-blue-500/20" },
+            h(LinkIcon, { className: "w-3.5 h-3.5 text-blue-400 shrink-0" }),
+            h("span", { className: "text-blue-300 flex-1 truncate font-mono" }, myUrl),
+            h(Button, { variant: "ghost", size: "sm", onClick: function () { copy(myUrl); }, title: "Copy your URL", className: "h-6 px-2 shrink-0" },
+              copied ? h(CheckIcon, { className: "w-3.5 h-3.5 text-emerald-400" }) : h(CopyIcon, { className: "w-3.5 h-3.5" })
+            )
+          ),
+
           h("div", null,
             h(Label, null, "Nickname"),
             h(Input, { placeholder: "e.g., remy, atlas", value: nick, onChange: function (e) { setNick(e.target.value); } })
@@ -132,8 +187,18 @@
             h(Input, { placeholder: "https://agent.tailXXXXX.ts.net", value: url, onChange: function (e) { setUrl(e.target.value); } })
           ),
           h("div", null,
-            h(Label, null, "Webhook Secret"),
-            h(Input, { type: "password", placeholder: "64-char hex secret from the receiver", value: secret, onChange: function (e) { setSecret(e.target.value); } })
+            h("div", { className: "flex items-center justify-between mb-1" },
+              h(Label, null, "Webhook Secret"),
+              h(Button, { variant: "ghost", size: "sm", onClick: handleGenerateSecret, disabled: generating, className: "h-6 px-2 text-xs" },
+                generating ? "⏳" : "🔑", " Generate"
+              )
+            ),
+            h("div", { className: "flex gap-1" },
+              h(Input, { type: "password", placeholder: "64-char hex secret — or click Generate", value: secret, onChange: function (e) { setSecret(e.target.value); }, className: "flex-1" }),
+              secret && h(Button, { variant: "ghost", size: "sm", onClick: function () { copy(secret); }, title: "Copy secret", className: "shrink-0" },
+                copied ? h(CheckIcon, { className: "w-3.5 h-3.5 text-emerald-400" }) : h(CopyIcon, { className: "w-3.5 h-3.5" })
+              )
+            )
           ),
           h("div", { className: "grid grid-cols-2 gap-3" },
             h("div", null,
@@ -536,12 +601,23 @@
       ),
 
       // Identity / status bar
-      identity && h("div", { className: "flex items-center gap-3 text-xs" },
-        h(Badge, { variant: identity.webhook_enabled ? "default" : "outline", className: identity.webhook_enabled ? "text-emerald-400" : "text-amber-400" },
-          identity.webhook_enabled ? "● Webhook listening on port " + identity.webhook_port : "○ Webhook not enabled"
+      identity && h("div", { className: "space-y-2" },
+        h("div", { className: "flex items-center gap-3 text-xs" },
+          h(Badge, { variant: identity.webhook_enabled ? "default" : "outline", className: identity.webhook_enabled ? "text-emerald-400" : "text-amber-400" },
+            identity.webhook_enabled ? "● Webhook listening on port " + identity.webhook_port : "○ Webhook not enabled"
+          ),
+          identity.routes.length > 0 && h("span", { className: "text-muted-foreground" },
+            "Routes: " + identity.routes.join(", ")
+          )
         ),
-        identity.routes.length > 0 && h("span", { className: "text-muted-foreground" },
-          "Routes: " + identity.routes.join(", ")
+        // Host URL — share this with other agents so they can connect back
+        identity.my_url && h("div", { className: "flex items-center gap-2 text-xs bg-white/5 rounded-lg px-3 py-2 border border-white/10" },
+          h(LinkIcon, { className: "w-3.5 h-3.5 text-blue-400 shrink-0" }),
+          h("span", { className: "text-muted-foreground shrink-0" }, "Your webhook URL:"),
+          h("code", { className: "flex-1 text-blue-300 truncate font-mono text-xs" }, identity.my_url),
+          h(Button, { variant: "ghost", size: "sm", onClick: function () { copy(identity.my_url); }, title: "Copy URL", className: "h-6 px-2 shrink-0" },
+            copied ? h(CheckIcon, { className: "w-3.5 h-3.5 text-emerald-400" }) : h(CopyIcon, { className: "w-3.5 h-3.5" })
+          )
         )
       ),
 
@@ -601,7 +677,8 @@
       // Modals
       showAdd && h(AddAgentModal, {
         onSave: function () { setShowAdd(false); loadData(); },
-        onClose: function () { setShowAdd(false); }
+        onClose: function () { setShowAdd(false); },
+        myUrl: identity ? identity.my_url : "",
       }),
       sendingTo && h(SendMessageModal, {
         agent: sendingTo,

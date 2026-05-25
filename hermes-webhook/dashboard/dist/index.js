@@ -528,6 +528,13 @@
     const [sendingTo, setSendingTo] = useState(null);
     const [activeTab, setActiveTab] = useState("conversations"); // "conversations" | "agents"
     const [activeConversation, setActiveConversation] = useState(null);
+    const [copiedUrl, setCopiedUrl] = useState(false);
+
+    const handleCopyUrl = useCallback(function (text) {
+      copyToClipboard(text);
+      setCopiedUrl(true);
+      setTimeout(function () { setCopiedUrl(false); }, 2000);
+    }, []);
 
     const loadData = useCallback(function () {
       setLoading(true);
@@ -612,8 +619,8 @@
           h(LinkIcon, { className: "w-3.5 h-3.5 text-blue-400 shrink-0" }),
           h("span", { className: "text-muted-foreground shrink-0" }, "Your webhook URL:"),
           h("code", { className: "flex-1 text-blue-300 truncate font-mono text-xs" }, identity.my_url),
-          h(Button, { variant: "ghost", size: "sm", onClick: function () { handleCopy(identity.my_url); }, title: "Copy URL", className: "h-6 px-2 shrink-0" },
-            copied ? h(CheckIcon, { className: "w-3.5 h-3.5 text-emerald-400" }) : h(CopyIcon, { className: "w-3.5 h-3.5" })
+          h(Button, { variant: "ghost", size: "sm", onClick: function () { handleCopyUrl(identity.my_url); }, title: "Copy URL", className: "h-6 px-2 shrink-0" },
+            copiedUrl ? h(CheckIcon, { className: "w-3.5 h-3.5 text-emerald-400" }) : h(CopyIcon, { className: "w-3.5 h-3.5" })
           )
         )
       ),

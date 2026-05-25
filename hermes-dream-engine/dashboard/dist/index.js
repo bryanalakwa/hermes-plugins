@@ -18,7 +18,6 @@
   var useState = SDK.hooks.useState;
   var useEffect = SDK.hooks.useEffect;
   var useCallback = SDK.hooks.useCallback;
-  var useRef = SDK.hooks.useRef;
   var Card = SDK.components.Card;
   var CardContent = SDK.components.CardContent;
   var CardHeader = SDK.components.CardHeader;
@@ -28,9 +27,19 @@
   var Input = SDK.components.Input;
   var Label = SDK.components.Label;
   var cn = SDK.utils.cn;
-  var timeAgo = SDK.utils.timeAgo;
 
   var API_BASE = "/api/plugins/hermes-dream-engine";
+
+  // Algorithm defaults from spec
+  var ALGO_DEFAULTS = {
+    idle_threshold_seconds: 300,        // T1 = 5 min
+    dormant_threshold_seconds: 1800,    // T2 = 30 min
+    soak_threshold_seconds: 3000,       // T3 = 50 min
+    hypnagogic_duration_seconds: 120,   // T4 = 2 min
+    max_dreams_per_day: 2,
+    consolidation_memory_count: 150,
+    invention_sample_size: 10
+  };
 
   function api(path, opts) {
     var token = window.__HERMES_SESSION_TOKEN__ || "";
@@ -62,10 +71,6 @@
       h("path", { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }),
       h("path", { d: "M8 16H3v5" }));
   }
-  function CheckIcon(props) {
-    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
-      h("polyline", { points: "20 6 9 17 4 12" }));
-  }
   function BrainIcon(props) {
     return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
       h("path", { d: "M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" }),
@@ -76,7 +81,6 @@
       h("path", { d: "M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" }));
   }
 
-  // --- State colors ---
   var STATE_COLORS = {
     active: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
     idle: "text-amber-400 border-amber-500/30 bg-amber-500/10",
@@ -85,11 +89,8 @@
     dreaming: "text-pink-400 border-pink-500/30 bg-pink-500/10"
   };
   var STATE_LABELS = {
-    active: "Active",
-    idle: "Idle",
-    dormant: "Dormant",
-    hypnagogic: "Hypnagogic",
-    dreaming: "Dreaming"
+    active: "Active", idle: "Idle", dormant: "Dormant",
+    hypnagogic: "Hypnagogic", dreaming: "Dreaming"
   };
 
   function fmtDuration(seconds) {
@@ -197,32 +198,31 @@
     );
   }
 
-  // --- Config Editor ---
+  // --- Config Editor (fixed: proper useState, no ref) ---
   function ConfigEditor(props) {
-    var configState = props.config || {};
-    var localRef = useRef(configState);
-    var local = localRef.current;
-    var setLocal = useState(local)[1];
+    var merged = Object.assign({}, ALGO_DEFAULTS, props.config || {});
+    var localState = useState(merged);
+    var local = localState[0];
+    var setLocal = localState[1];
     var savingState = useState(false);
     var saving = savingState[0];
     var setSaving = savingState[1];
 
     var fields = [
-      { key: "idle_threshold_seconds", label: "T1 \u2014 Idle threshold (s)", min: 60, max: 3600 },
-      { key: "dormant_threshold_seconds", label: "T2 \u2014 Dormant threshold (s)", min: 300, max: 7200 },
-      { key: "soak_threshold_seconds", label: "T3 \u2014 Soak period (s)", min: 600, max: 14400 },
-      { key: "hypnagogic_duration_seconds", label: "T4 \u2014 Hypnagogic duration (s)", min: 30, max: 600 },
-      { key: "max_dreams_per_day", label: "Max dreams/day", min: 1, max: 10 },
-      { key: "consolidation_memory_count", label: "Memories to consolidate", min: 10, max: 500 },
-      { key: "invention_sample_size", label: "Invention sample size (K)", min: 3, max: 30 }
+      { key: "idle_threshold_seconds", label: "T1 \u2014 Idle threshold (s)", hint: "Active \u2192 Idle. Default: 300 (5 min)", min: 60, max: 3600 },
+      { key: "dormant_threshold_seconds", label: "T2 \u2014 Dormant threshold (s)", hint: "Idle \u2192 Dormant (cumulative). Default: 1800 (30 min)", min: 300, max: 7200 },
+      { key: "soak_threshold_seconds", label: "T3 \u2014 Soak period (s)", hint: "Dormant soak before dream gate. Default: 3000 (50 min)", min: 600, max: 14400 },
+      { key: "hypnagogic_duration_seconds", label: "T4 \u2014 Hypnagogic duration (s)", hint: "Pre-dream prep window. Default: 120 (2 min)", min: 30, max: 600 },
+      { key: "max_dreams_per_day", label: "Max dreams / day", hint: "Hard cap, resets at midnight. Default: 2", min: 1, max: 10 },
+      { key: "consolidation_memory_count", label: "Memories to consolidate (N)", hint: "Phase 1: recent memories reviewed. Default: 150", min: 10, max: 500 },
+      { key: "invention_sample_size", label: "Invention sample size (K)", hint: "Phase 3: random memories sampled. Default: 10", min: 3, max: 30 }
     ];
 
     var updateField = useCallback(function (key, value) {
-      var next = Object.assign({}, localRef.current);
+      var next = Object.assign({}, local);
       next[key] = value;
-      localRef.current = next;
       setLocal(next);
-    }, []);
+    }, [local]);
 
     return h("div", { className: "space-y-3" },
       fields.map(function (f) {
@@ -232,22 +232,28 @@
             type: "number",
             min: f.min,
             max: f.max,
-            value: local[f.key] || "",
-            onChange: function (e) { updateField(f.key, parseInt(e.target.value) || 0); },
+            value: local[f.key],
+            onChange: function (e) { updateField(f.key, parseInt(e.target.value) || ALGO_DEFAULTS[f.key]); },
             className: "h-8 text-xs"
-          })
+          }),
+          h("p", { className: "text-[10px] text-muted-foreground mt-0.5" }, f.hint)
         );
       }),
-      h(Button, { size: "sm", onClick: function () {
-        setSaving(true);
-        api("/config", { method: "PUT", body: JSON.stringify(localRef.current) })
-          .then(function () { setSaving(false); props.onSave(); })
-          .catch(function () { setSaving(false); });
-      }, disabled: saving }, saving ? "Saving..." : "Save Config")
+      h("div", { className: "flex items-center gap-2 pt-2" },
+        h(Button, { size: "sm", onClick: function () {
+          setSaving(true);
+          api("/config", { method: "PUT", body: JSON.stringify(local) })
+            .then(function () { setSaving(false); if (props.onSave) props.onSave(); })
+            .catch(function () { setSaving(false); });
+        }, disabled: saving }, saving ? "Saving..." : "Save Config"),
+        h(Button, { variant: "outline", size: "sm", onClick: function () {
+          setLocal(Object.assign({}, ALGO_DEFAULTS));
+        } }, "Reset to Defaults")
+      )
     );
   }
 
-  // --- Main Page ---
+  // --- Main Page (fixed: loading only blocks on initial load) ---
   function DreamEnginePage() {
     var statusState = useState(null);
     var status = statusState[0];
@@ -255,9 +261,10 @@
     var journalState = useState([]);
     var journal = journalState[0];
     var setJournal = journalState[1];
-    var loadingState = useState(true);
-    var loading = loadingState[0];
-    var setLoading = loadingState[1];
+    // FIX: separate "never loaded" from "refreshing" so auto-refresh never hides UI
+    var initialLoadState = useState(true);
+    var initialLoad = initialLoadState[0];
+    var setInitialLoad = initialLoadState[1];
     var errorState = useState(null);
     var error = errorState[0];
     var setError = errorState[1];
@@ -267,10 +274,8 @@
     var forcingState = useState(false);
     var forcing = forcingState[0];
     var setForcing = forcingState[1];
-    var bottomRef = useRef(null);
 
     var loadData = useCallback(function () {
-      setLoading(true);
       setError(null);
       Promise.all([
         api("/status").catch(function () { return null; }),
@@ -279,15 +284,17 @@
         if (results[0]) setStatus(results[0]);
         if (results[1]) setJournal(results[1].entries || []);
         if (!results[0] && !results[1]) setError("Failed to load data");
+        // Only clear initialLoad on first successful status fetch
+        if (results[0]) setInitialLoad(false);
       }).catch(function (err) {
         setError(err.message);
-      }).finally(function () {
-        setLoading(false);
+        setInitialLoad(false);
       });
     }, []);
 
     useEffect(function () { loadData(); }, [loadData]);
 
+    // FIX: auto-refresh no longer sets loading=true, so it won't wipe the UI
     useEffect(function () {
       var interval = setInterval(loadData, 15000);
       return function () { clearInterval(interval); };
@@ -314,7 +321,8 @@
         .catch(function () {});
     }, [loadData]);
 
-    if (loading && !status) {
+    // FIX: only show loading spinner on very first load, not on auto-refresh
+    if (initialLoad && !status) {
       return h("div", { className: "flex items-center justify-center py-12" },
         h("div", { className: "text-muted-foreground flex items-center gap-2" },
           h(MoonIcon, { className: "w-5 h-5 animate-pulse" }),
@@ -344,7 +352,7 @@
           h(Button, { variant: "ghost", size: "sm", onClick: loadData, title: "Refresh" },
             h(RefreshIcon, { className: "w-3.5 h-3.5" })
           ),
-          h(Button, { variant: "outline", size: "sm", onClick: handleHeartbeat, title: "Send heartbeat" },
+          h(Button, { variant: "outline", size: "sm", onClick: handleHeartbeat, title: "Send heartbeat — resets idle timers" },
             h(ZapIcon, { className: "w-3.5 h-3.5 mr-1" }), "Ping"
           ),
           h(Button, { size: "sm", onClick: handleForceDream, disabled: forcing, title: "Force a dream session" },
@@ -447,9 +455,7 @@
         h(CardContent, null,
           h(ConfigEditor, { config: config, onSave: loadData })
         )
-      ),
-
-      h("div", { ref: bottomRef })
+      )
     );
   }
 

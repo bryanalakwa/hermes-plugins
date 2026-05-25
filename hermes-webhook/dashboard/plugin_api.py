@@ -97,8 +97,8 @@ def _load_history() -> list:
 
 
 def _save_history(history: list) -> None:
-    """Save message history (keep last 200 entries)."""
-    history = history[-200:]
+    """Save message history (keep last 500 entries)."""
+    history = history[-500:]
     HISTORY_PATH.write_text(json.dumps(history, indent=2, ensure_ascii=False))
 
 
@@ -107,6 +107,20 @@ def _add_history_entry(entry: dict) -> None:
     history = _load_history()
     history.append(entry)
     _save_history(history)
+
+
+def _get_agent_nick_from_sender(sender: str, my_name: str) -> str:
+    """Map a sender name to a configured agent nick, or return the sender name."""
+    section = _get_webhook_config()
+    receivers = section.get("receivers", {})
+    # Check if sender matches a known receiver by name
+    for nick, r in receivers.items():
+        # We don't store the agent's display name in config, so we
+        # match by nick or by URL hostname as a heuristic
+        if nick.lower() == sender.lower():
+            return nick
+    # Fallback: return the sender name as-is
+    return sender
 
 
 # ── Send message ───────────────────────────────────────────
@@ -139,6 +153,45 @@ def _send_webhook(url: str, secret: str, route: str, message: str, sender: str) 
         return {"ok": False, "status": e.code, "body": body}
     except Exception as e:
         return {"ok": False, "status": 0, "body": str(e)}
+
+
+# ── API: Inbound message logging (called by webhook handler) ──
+
+@router.post("/inbound")
+async def log_inbound(data: dict):
+    """Log an inbound message from another agent.
+
+    Called by the webhook adapter when an agent-to-agent message
+    is received and processed. Stores it in history for the
+    conversation view.
+    """
+    sender = (data.get("sender") or "unknown").strip()
+    message = (data.get("message") or "").strip()
+    mode = (data.get("mode") or "ping").strip()
+    response = (data.get("response") or "").strip()
+    status = (data.get("status") or "received").strip()
+
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    section = _get_webhook_config()
+    my_name = section.get("my_name", "Agent")
+    nick = _get_agent_nick_from_sender(sender, my_name)
+
+    entry = {
+        "id": str(uuid.uuid4())[:8],
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "direction": "in",
+        "nick": nick,
+        "sender_name": sender,
+        "mode": mode,
+        "message": message,
+        "response": response,
+        "status": status,
+    }
+    _add_history_entry(entry)
+
+    return {"ok": True, "entry_id": entry["id"]}
 
 
 # ── API: Get all agents ────────────────────────────────────
@@ -289,17 +342,76 @@ async def send_message(data: dict):
     }
 
 
-# ── API: Message history ───────────────────────────────────
+# ── API: Full message history ──────────────────────────────
 
 @router.get("/history")
-async def get_history(limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0)):
-    """Get message history, newest first."""
+async def get_history(limit: int = Query(default=50, ge=1, le=500), offset: int = Query(default=0, ge=0)):
+    """Get full message history, newest first."""
     history = _load_history()
     total = len(history)
-    # Reverse for newest-first
     history_rev = list(reversed(history))
     page = history_rev[offset:offset + limit]
     return {"messages": page, "total": total, "offset": offset, "limit": limit}
+
+
+# ── API: Per-agent conversation history ────────────────────
+
+@router.get("/history/{nick}")
+async def get_agent_history(nick: str, limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0)):
+    """Get conversation history with a specific agent, newest first.
+
+    Returns both inbound and outbound messages involving the given
+    agent nick, so the dashboard can render a full conversation thread.
+    """
+    history = _load_history()
+    # Filter messages involving this nick (either direction)
+    filtered = [
+        m for m in history
+        if m.get("nick", "").lower() == nick.lower()
+    ]
+    total = len(filtered)
+    filtered_rev = list(reversed(filtered))
+    page = filtered_rev[offset:offset + limit]
+    return {"messages": page, "total": total, "offset": offset, "limit": limit, "nick": nick}
+
+
+# ── API: Conversations list ────────────────────────────────
+
+@router.get("/conversations")
+async def get_conversations():
+    """List all agent conversations with last message preview.
+
+    Returns a summary per agent nick: last message, timestamp,
+    message count, and unread indicator.
+    """
+    history = _load_history()
+    conversations: Dict[str, dict] = {}
+
+    for entry in history:
+        nick = entry.get("nick", "unknown")
+        if nick not in conversations:
+            conversations[nick] = {
+                "nick": nick,
+                "last_message": entry.get("message", ""),
+                "last_timestamp": entry.get("timestamp", ""),
+                "last_direction": entry.get("direction", ""),
+                "count": 0,
+                "in_count": 0,
+                "out_count": 0,
+            }
+        conv = conversations[nick]
+        conv["count"] += 1
+        conv["last_message"] = entry.get("message", "")
+        conv["last_timestamp"] = entry.get("timestamp", "")
+        conv["last_direction"] = entry.get("direction", "")
+        if entry.get("direction") == "in":
+            conv["in_count"] += 1
+        else:
+            conv["out_count"] += 1
+
+    # Sort by last timestamp descending
+    result = sorted(conversations.values(), key=lambda c: c["last_timestamp"], reverse=True)
+    return {"conversations": result, "total": len(result)}
 
 
 # ── API: Clear history ─────────────────────────────────────
@@ -309,6 +421,17 @@ async def clear_history():
     """Clear all message history."""
     _save_history([])
     return {"ok": True}
+
+
+# ── API: Clear history for specific agent ──────────────────
+
+@router.delete("/history/{nick}")
+async def clear_agent_history(nick: str):
+    """Clear message history for a specific agent."""
+    history = _load_history()
+    filtered = [m for m in history if m.get("nick", "").lower() != nick.lower()]
+    _save_history(filtered)
+    return {"ok": True, "removed": len(history) - len(filtered)}
 
 
 # ── API: Get my identity ───────────────────────────────────

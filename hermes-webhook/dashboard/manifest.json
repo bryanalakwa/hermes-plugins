@@ -1,9 +1,9 @@
 {
   "name": "hermes-webhook",
   "label": "Agents",
-  "description": "Inter-agent webhook communication — manage agent connections, send messages, view message history. Connect to other Hermes agents over Tailscale.",
+  "description": "Inter-agent webhook communication — manage agent connections, send messages, view per-agent conversation history. Connect to other Hermes agents over Tailscale.",
   "icon": "Send",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "tab": {
     "path": "/agents",
     "position": "after:dreams"

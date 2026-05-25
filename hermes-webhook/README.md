@@ -1,13 +1,15 @@
-# Hermes Inter-Agent Webhook Plugin v2.0
+# Hermes Inter-Agent Webhook Plugin v2.1
 
-Send and receive messages between Hermes agents — or between your agent and any HTTP endpoint. Comes with a dashboard tab for managing agents, sending test messages, and viewing history.
+Send and receive messages between Hermes agents — or between your agent and any HTTP endpoint. Comes with a dashboard tab for managing agents, sending messages, and viewing per-agent conversation history.
 
 ## Features
 
 - **Two send modes:**
   - `agent-ping` — sends a message, the receiving agent reasons and responds
   - `agent-notify` — direct verbatim forward, zero LLM cost
-- **Dashboard tab:** `/agents` in the web dashboard — manage connections, send messages, view history
+- **Sender-aware routing** — receiving agents know which agent sent the message and can decide whether to relay to their human or handle silently
+- **Per-agent conversation view** — dashboard shows threaded chat history with each agent, inbound + outbound messages as chat bubbles
+- **Dashboard tab:** `/agents` in the web dashboard — manage connections, chat with agents, view history
 - **HMAC-SHA256 signing** — every message is authenticated with a shared secret
 - **Hermes skill included** — agents can set up the webhook programmatically via the skill
 - **Scripts included** — `send.sh` and `send_webhook.py` for use outside the agent (CI, cron, etc.)
@@ -84,10 +86,10 @@ Via script:
 
 Once installed, the Agents tab at `http://127.0.0.1:9119/agents` shows:
 
-- **Connected Agents** — list of configured agent connections (name, URL, status)
-- **Send Message** — pick an agent, choose mode, type a message, send
-- **History** — log of all sent/received messages with timestamps
-- **Test** — ping an agent and see the response inline
+- **Conversations** — per-agent chat threads with message bubbles (inbound left, outbound right), last message preview, send messages directly from the chat view
+- **Agents** — list of configured agent connections (name, URL, status), add/edit/delete agents
+- **Test** — ping an agent to verify the connection works
+- **History** — full message log with timestamps, filterable by agent
 
 ## Files
 

@@ -7,7 +7,7 @@ Plugins for [Hermes Agent](https://github.com/NousResearch/hermes-agent) that ad
 | Plugin | What it does |
 |---|---|
 | [hermes-dreaming](hermes-dreaming/) | 🌙 Idle-time memory consolidation — dreams while you're away, surfaces insights worth sharing. Two-tier memory (holographic + ChromaDB). Dashboard tab at `/dreams`. |
-| [hermes-webhook](hermes-webhook/) | 🤖 Inter-agent messaging — send/receive messages between Hermes agents or any HTTP endpoint. HMAC-SHA256 signed. Dashboard tab at `/agents`. |
+|| [hermes-webhook](hermes-webhook/) | 🤖 Inter-agent messaging — send/receive messages between Hermes agents over Tailscale. HMAC-SHA256 signed. Per-agent conversation view in dashboard. Sender-aware routing (agents know who sent the message). Dashboard tab at `/agents`. |
 
 ## Installing a Plugin
 

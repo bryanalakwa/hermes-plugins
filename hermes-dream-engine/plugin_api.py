@@ -7,6 +7,10 @@ Provides endpoints for:
 - Dream journal history
 - Manual controls (force dream, clear state)
 - Configuration
+
+The daemon is created lazily on first API call. In the dashboard process,
+this module owns the daemon. In the gateway process, __init__.py may also
+call set_daemon() to enable hook-based heartbeat injection.
 """
 
 from __future__ import annotations
@@ -41,20 +45,68 @@ except Exception:
 router = APIRouter()
 _log = logging.getLogger(__name__)
 
-# Reference to the daemon instance (set by __init__.py on plugin load)
+# Imports deferred until needed
 _daemon = None
+_daemon_lock = None
+
+
+def _get_home() -> Path:
+    val = Path.home() / ".hermes"
+    return val
+
+
+def _ensure_daemon():
+    """Create the daemon singleton if it doesn't exist yet."""
+    global _daemon, _daemon_lock
+    if _daemon is not None:
+        return _daemon
+
+    # Lazy import to avoid circular deps
+    import threading
+    if _daemon_lock is None:
+        _daemon_lock = threading.Lock()
+
+    with _daemon_lock:
+        if _daemon is not None:
+            return _daemon
+
+        home = _get_home()
+        config_path = home / "config.yaml"
+        config = {}
+        if config_path.exists():
+            try:
+                import yaml
+                with open(config_path) as f:
+                    cfg = yaml.safe_load(f) or {}
+                config = cfg.get("plugins", {}).get("hermes-dream-engine", {})
+            except Exception:
+                pass
+
+        try:
+            from .daemon import DreamDaemon
+        except ImportError:
+            from daemon import DreamDaemon
+        _daemon = DreamDaemon(
+            config=config,
+            state_path=home / "dream_engine" / "state.json",
+            journal_path=home / "dream_engine" / "journal.json",
+            memory_source_path=home / "dreams" / "state.json",
+        )
+        _daemon.start()
+        _log.info("Dream daemon auto-started in dashboard process")
+        return _daemon
 
 
 def set_daemon(daemon) -> None:
-    """Called by __init__.py to inject the daemon reference."""
+    """Called by __init__.py (gateway process) to inject a daemon reference.
+    If called, the injected daemon is used instead of creating our own."""
     global _daemon
     _daemon = daemon
+    _log.info("Dream daemon injected from gateway")
 
 
 def _get_daemon():
-    if _daemon is None:
-        raise HTTPException(status_code=503, detail="Dream daemon not initialized")
-    return _daemon
+    return _ensure_daemon()
 
 
 # ── Status ─────────────────────────────────────────────────
@@ -121,15 +173,17 @@ async def get_config():
 async def update_config(data: dict):
     """Update dream engine configuration."""
     daemon = _get_daemon()
+    updated = {}
     for key, value in data.items():
         if key in daemon._config:
             daemon._config[key] = value
+            updated[key] = value
     # Update monitor thresholds
     daemon._monitor._idle_threshold = daemon._config.get("idle_threshold_seconds", 300)
     daemon._monitor._dormant_threshold = daemon._config.get("dormant_threshold_seconds", 1800)
     daemon._monitor._soak_threshold = daemon._config.get("soak_threshold_seconds", 3000)
     daemon._monitor._hypnagogic_duration = daemon._config.get("hypnagogic_duration_seconds", 120)
-    return {"ok": True, "config": daemon._config}
+    return {"ok": True, "config": daemon._config, "updated": list(updated.keys())}
 
 
 # ── Heartbeat (for testing) ────────────────────────────────

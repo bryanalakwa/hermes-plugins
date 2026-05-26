@@ -41,6 +41,8 @@ class DreamSession:
         self.contradictions_found: int = 0
         # HRR-generated title (set during finalization)
         self.hrr_title: str = ""
+        # Cognitive budget (set during finalization)
+        self.cognitive_budget: dict = {}
 
     def to_dict(self) -> dict:
         return {
@@ -57,6 +59,7 @@ class DreamSession:
             "ideas": self.ideas,
             "contradictions_found": self.contradictions_found,
             "hrr_title": self.hrr_title,
+            "cognitive_budget": self.cognitive_budget,
         }
 
 
@@ -240,6 +243,104 @@ IMPORTANT: Output at least one item per category if any exist.
 """,
     }
 
+    # ── Cognitive Budget Allocator ────────────────────────────
+
+    class CognitiveBudget:
+        """Computes and stores the cognitive budget for a dream session.
+
+        The budget determines how much "mental effort" to expend based on
+        available context richness. Sparse context = shallow dreams.
+        Rich context = deep, creative dreams.
+
+        Budget dimensions:
+        - memory_count: how many facts to feed the LLM (50-250)
+        - connection_target: how many novel connections to attempt (3-15)
+        - skip_invention: whether to skip invention phase when context is thin
+        - depth_label: human-readable label for the journal
+        """
+
+        # Mode overrides
+        MODES = {
+            "minimal": {"memory_count": 50, "connection_target": 3, "skip_invention": True, "depth_label": "minimal"},
+            "adaptive": None,  # computed from signals
+            "always_deep": {"memory_count": 250, "connection_target": 12, "skip_invention": False, "depth_label": "deep"},
+        }
+
+        def __init__(self, signals: dict, mode: str = "adaptive"):
+            if mode != "adaptive" and mode in self.MODES and self.MODES[mode]:
+                self.budget = dict(self.MODES[mode])
+                self.budget["mode"] = mode
+                self.budget["richness_score"] = None
+            else:
+                self.budget = self._compute_adaptive(signals)
+                self.budget["mode"] = "adaptive"
+            self.budget["signals"] = signals
+
+        @staticmethod
+        def _compute_adaptive(signals: dict) -> dict:
+            """Compute budget from context signals.
+
+            Signals expected:
+            - facts_count: int
+            - avg_trust: float (0-1)
+            - recency_ratio: float (facts updated in last 7 days / total)
+            - recent_dream_quality: float (avg insights+ideas from last 3 dreams)
+            - recent_error_rate: float (phases with errors / total phases in last 3)
+            """
+            facts_count = signals.get("facts_count", 0)
+            avg_trust = signals.get("avg_trust", 0.5)
+            recency_ratio = signals.get("recency_ratio", 0.5)
+            recent_quality = signals.get("recent_dream_quality", 0.5)
+            error_rate = signals.get("recent_error_rate", 0.0)
+
+            # Richness score: weighted combination
+            # Normalize facts_count: 0-50 facts = sparse, 50-200 = moderate, 200+ = rich
+            count_score = min(facts_count / 150.0, 1.0)
+
+            richness = (
+                count_score * 0.30 +
+                avg_trust * 0.25 +
+                recency_ratio * 0.20 +
+                min(recent_quality / 10.0, 1.0) * 0.15 +
+                max(0.0, 1.0 - error_rate) * 0.10
+            )
+            richness = max(0.0, min(1.0, richness))
+
+            # Map richness to parameters
+            if richness < 0.2:
+                depth_label = "minimal"
+                memory_count = 50
+                connection_target = 3
+                skip_invention = True
+            elif richness < 0.4:
+                depth_label = "light"
+                memory_count = 80
+                connection_target = 5
+                skip_invention = False
+            elif richness < 0.6:
+                depth_label = "moderate"
+                memory_count = 120
+                connection_target = 7
+                skip_invention = False
+            elif richness < 0.8:
+                depth_label = "deep"
+                memory_count = 180
+                connection_target = 10
+                skip_invention = False
+            else:
+                depth_label = "very_deep"
+                memory_count = 250
+                connection_target = 15
+                skip_invention = False
+
+            return {
+                "richness_score": round(richness, 3),
+                "memory_count": memory_count,
+                "connection_target": connection_target,
+                "skip_invention": skip_invention,
+                "depth_label": depth_label,
+            }
+
     def __init__(self, journal_path: Path, memory_source_path: Optional[Path] = None,
                  context_dir: Optional[Path] = None):
         self.journal_path = Path(journal_path)
@@ -249,6 +350,8 @@ IMPORTANT: Output at least one item per category if any exist.
         self.journal_path.parent.mkdir(parents=True, exist_ok=True)
         self._session: Optional[DreamSession] = None
         self._interrupted = False
+        # Cognitive budget state (computed at session start)
+        self._cognitive_budget: Optional[dict] = None
 
     @property
     def is_running(self) -> bool:
@@ -257,7 +360,86 @@ IMPORTANT: Output at least one item per category if any exist.
     def interrupt(self) -> None:
         """Signal the current dream session to stop after the current phase."""
         self._interrupted = True
-        logger.info("dream interruption requested")
+
+    # ── Cognitive Budget: signal computation ───────────────────
+
+    def _compute_budget_signals(self) -> dict:
+        """Gather signals for the cognitive budget computation.
+
+        Returns dict with facts_count, avg_trust, recency_ratio,
+        recent_dream_quality, and recent_error_rate.
+        """
+        signals = {
+            "facts_count": 0,
+            "avg_trust": 0.5,
+            "recency_ratio": 0.5,
+            "recent_dream_quality": 5.0,
+            "recent_error_rate": 0.0,
+        }
+
+        # 1. Holographic DB stats
+        try:
+            import sqlite3
+            db_path = self._find_db_path()
+            if db_path:
+                conn = sqlite3.connect(str(db_path))
+                row = conn.execute(
+                    "SELECT COUNT(*) as cnt, AVG(trust_score) as avg_trust FROM facts"
+                ).fetchone()
+                signals["facts_count"] = row[0] or 0
+                signals["avg_trust"] = row[1] or 0.5
+
+                # Recency: ratio of facts updated in last 7 days
+                recent = conn.execute(
+                    "SELECT COUNT(*) FROM facts WHERE created_at > datetime('now', '-7 days')"
+                ).fetchone()
+                total = signals["facts_count"]
+                signals["recency_ratio"] = (recent[0] / total) if total > 0 else 0.5
+                conn.close()
+        except Exception as e:
+            logger.debug("budget signal (db stats): %s", e)
+
+        # 2. Recent dream quality from journal
+        try:
+            recent_dreams = self.read_journal(3)
+            if recent_dreams:
+                total_insights = 0
+                total_ideas = 0
+                total_phases = 0
+                total_errors = 0
+                for d in recent_dreams:
+                    total_insights += len(d.get("insights", []))
+                    total_ideas += len(d.get("ideas", []))
+                    phases = d.get("phases_run", [])
+                    total_phases += len(phases)
+                    total_errors += len(d.get("errors", []))
+                n = len(recent_dreams)
+                signals["recent_dream_quality"] = (total_insights + total_ideas) / n
+                signals["recent_error_rate"] = (
+                    total_errors / total_phases if total_phases > 0 else 0.0
+                )
+        except Exception as e:
+            logger.debug("budget signal (journal): %s", e)
+
+        return signals
+
+    def _apply_cognitive_budget(self) -> dict:
+        """Compute and apply the cognitive budget for the current session.
+
+        Returns the budget dict for logging/journaling.
+        """
+        signals = self._compute_budget_signals()
+        budget = DreamEngine.CognitiveBudget(signals, mode="adaptive")
+        self._cognitive_budget = budget.budget
+        logger.info(
+            "cognitive budget: richness=%.2f depth=%s memory=%d connections=%d skip_inv=%s",
+            self._cognitive_budget.get("richness_score", -1),
+            self._cognitive_budget.get("depth_label", "?"),
+            self._cognitive_budget.get("memory_count", 150),
+            self._cognitive_budget.get("connection_target", 7),
+            self._cognitive_budget.get("skip_invention", False),
+        )
+        return self._cognitive_budget
 
     # ── Session lifecycle ──────────────────────────────────
 
@@ -271,19 +453,40 @@ IMPORTANT: Output at least one item per category if any exist.
 
     def run_all_phases(self) -> DreamSession:
         """Run all 4 phases. Each phase writes a context file, triggers
-        LLM execution via cron, and collects results."""
+        LLM execution via cron, and collects results.
+
+        The cognitive budget is computed before the first phase to determine
+        memory retrieval breadth, connection depth, and whether to skip
+        invention when context is thin.
+        """
         if not self._session:
             self.start_session()
 
         s = self._session
-        phases = ["consolidation", "problem_reevaluation", "invention", "dream_log"]
+
+        # Compute cognitive budget before running phases
+        budget = self._apply_cognitive_budget()
+        memory_count = budget.get("memory_count", 150)
+        skip_invention = budget.get("skip_invention", False)
+        connection_target = budget.get("connection_target", 7)
+
+        # Build phase list, optionally skipping invention
+        phases = ["consolidation", "problem_reevaluation"]
+        if not skip_invention:
+            phases.append("invention")
+        phases.append("dream_log")
+
+        if skip_invention:
+            logger.info("cognitive budget: skipping invention phase (context too thin)")
 
         try:
             for phase_name in phases:
                 if self._interrupted and phase_name != "dream_log":
                     s.errors.append(f"{phase_name}: interrupted before start")
                     continue
-                self._run_phase(phase_name)
+                # Pass budget parameters to _run_phase
+                self._run_phase(phase_name, memory_count=memory_count,
+                                connection_target=connection_target)
         except Exception as e:
             s.errors.append(str(e))
             logger.exception("dream session error")
@@ -292,8 +495,15 @@ IMPORTANT: Output at least one item per category if any exist.
 
         return s
 
-    def _run_phase(self, phase_name: str) -> None:
-        """Execute a single dream phase via LLM."""
+    def _run_phase(self, phase_name: str, memory_count: int = 150,
+                    connection_target: int = 7) -> None:
+        """Execute a single dream phase via LLM.
+
+        Args:
+            phase_name: which phase to run
+            memory_count: how many facts to retrieve (from cognitive budget)
+            connection_target: how many connections to request (from cognitive budget)
+        """
         self._session.phases_run.append(phase_name)
         logger.info("dream phase: %s", phase_name)
 
@@ -302,7 +512,16 @@ IMPORTANT: Output at least one item per category if any exist.
             if phase_name == "dream_log":
                 context = self._build_dream_log_context()
             else:
-                context = self._gather_memory_context()
+                context = self._gather_memory_context(limit=memory_count)
+
+            #Inject connection target for invention phase
+            if phase_name == "invention":
+                context = (
+                    f"### COGNITIVE BUDGET\n"
+                    f"Target: approximately {connection_target} novel connections.\n"
+                    f"Quality over quantity — only include genuinely surprising links.\n\n"
+                    f"{context}"
+                )
 
             prompt = self.PHASE_PROMPTS[phase_name].format(context=context)
 
@@ -636,19 +855,39 @@ IMPORTANT: Output at least one item per category if any exist.
         # Generate HRR-powered title
         s.hrr_title = self._generate_hrr_title()
 
+        # Attach cognitive budget to summary
+        if self._cognitive_budget:
+            cb = self._cognitive_budget
+            s.cognitive_budget = {
+                "mode": cb.get("mode", "adaptive"),
+                "richness": cb.get("richness_score"),
+                "depth": cb.get("depth_label"),
+                "memory_count": cb.get("memory_count"),
+                "connection_target": cb.get("connection_target"),
+                "skipped_invention": cb.get("skip_invention", False),
+            }
+            s.summary += (
+                f" Budget: {cb.get('depth_label', '?')}"
+                f" (richness={cb.get('richness_score', '?')})."
+            )
+
         self._append_journal(s.to_dict())
         logger.info("dream session finalized — %s", s.summary)
 
     # ── Context gathering ──────────────────────────────────
 
-    def _gather_memory_context(self) -> str:
+    def _gather_memory_context(self, limit: int = 150) -> str:
         """Gather rich context from holographic memory, MEMORY.md, USER.md,
-        and the dreams state file. Returns formatted text for LLM prompt."""
+        and the dreams state file. Returns formatted text for LLM prompt.
+
+        Args:
+            limit: max facts to retrieve (controlled by cognitive budget)
+        """
         parts = []
         total_items = 0
 
         # 1. Holographic fact store (most important)
-        facts = self._read_facts_from_db(limit=150)
+        facts = self._read_facts_from_db(limit=limit)
         if facts:
             parts.append("### Stored Facts (from holographic memory):")
             for i, fact in enumerate(facts, 1):

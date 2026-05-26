@@ -873,6 +873,16 @@
           h("div", { className: "flex items-center justify-between text-xs pt-2 border-t border-border/20" },
             h("span", { className: "text-muted-foreground" }, "Dreams today"),
             h("span", { className: "font-mono" }, (status.dreams_today || 0) + " / " + (status.max_dreams || 2))
+          ),
+          // Cognitive budget display
+          h("div", { className: "flex items-center justify-between text-xs pt-2 border-t border-border/20" },
+            h("span", { className: "text-muted-foreground" }, "Cognitive depth"),
+            h("span", { className: "font-mono" },
+              h(Badge, {
+                variant: "outline",
+                className: "text-[10px] text-cyan-400 border-cyan-500/30"
+              }, status && status.config && status.config.depth ? status.config.depth : "adaptive")
+            )
           )
         )
       ),

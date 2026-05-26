@@ -103,6 +103,8 @@ class DreamDaemon:
     def get_status(self) -> dict:
         """Return full daemon status for the dashboard."""
         self._check_quota_reset()
+        # Get cognitive budget from engine (if available)
+        cb = getattr(self._engine, '_cognitive_budget', None) or {}
         return {
             "state": self._state_machine.state.value,
             "monitor": self._monitor.snapshot(),
@@ -116,6 +118,9 @@ class DreamDaemon:
                 "T3_soak": self._config["soak_threshold_seconds"],
                 "T4_hypnagogic": self._config["hypnagogic_duration_seconds"],
                 "max_dreams": self._config["max_dreams_per_day"],
+                # Cognitive budget info
+                "depth": cb.get("depth_label", "adaptive"),
+                "richness": cb.get("richness_score", None),
             },
         }
 

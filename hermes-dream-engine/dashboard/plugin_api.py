@@ -7,6 +7,7 @@ Provides endpoints for:
 - Dream journal history
 - Manual controls (force dream, clear state)
 - Configuration
+- HRR-powered title generation
 
 The daemon is created lazily on first API call. In the dashboard process,
 this module owns the daemon. In the gateway process, __init__.py may also
@@ -232,6 +233,131 @@ async def update_config(data: dict):
     # Also save daemon state (which includes config)
     daemon._save_state()
     return {"ok": True, "config": daemon._config, "updated": list(updated.keys())}
+
+
+# ── HRR-Powered Title Generation ───────────────────────────
+
+# Sentinel for "not yet initialized" caching
+_HRR_CACHE_SENTINEL = object()
+
+
+def _get_chroma_search():
+    """Self-healing accessor for ChromaDB search function.
+
+    Returns the vector_store.search function, or None if ChromaDB is
+    unavailable. Caches the result after first successful initialization.
+    """
+    cached = _get_chroma_search._cache
+    if cached is not _HRR_CACHE_SENTINEL:
+        return cached
+
+    try:
+        _home = _get_home()
+        _holo_plugin = _home / "hermes-agent" / "plugins" / "memory" / "holographic"
+        if str(_holo_plugin) not in sys.path:
+            sys.path.insert(0, str(_holo_plugin))
+        from vector_store import search as _chroma_search_fn
+        _get_chroma_search._cache = _chroma_search_fn
+        _log.info("ChromaDB search initialized for HRR title generation")
+        return _chroma_search_fn
+    except (ImportError, ModuleNotFoundError) as e:
+        _log.info("ChromaDB not available for HRR titles: %s", e)
+        _get_chroma_search._cache = None
+        return None
+    except Exception as e:
+        _log.warning("Failed to initialize ChromaDB for HRR titles: %s", e)
+        _get_chroma_search._cache = None
+        return None
+
+_get_chroma_search._cache = _HRR_CACHE_SENTINEL
+
+
+@router.post("/title/generate")
+async def generate_title(data: dict):
+    """Generate a contextually meaningful title using HRR vector similarity.
+
+    Takes dream insight text, finds the nearest neighbor in the holographic
+    fact store via ChromaDB, and returns that fact's most distinctive phrase
+    as a blog-style title.
+
+    Request: {"text": "dream insight text...", "session_id": "..."}
+    Response: {"title": "...", "source_fact": "...", "distance": 0.12}
+    """
+    text = data.get("text", "")
+    if not text or len(text) < 10:
+        return {"title": "Dream Session", "source_fact": None, "distance": None}
+
+    title, source, distance = _hrr_title_from_chroma(text)
+    if title:
+        return {"title": title, "source_fact": source, "distance": distance}
+
+    return {"title": _extract_title_phrase(text), "source_fact": None, "distance": None}
+
+
+def _hrr_title_from_chroma(query_text: str):
+    """Use ChromaDB to find the nearest fact to the query text.
+
+    Returns (title_phrase, source_fact_preview, distance) or (None, None, None).
+    """
+    _chroma_search_fn = _get_chroma_search()
+    if _chroma_search_fn is None:
+        return None, None, None
+
+    try:
+        results = _chroma_search_fn(query_text, n_results=3)
+        if not results:
+            return None, None, None
+
+        best = None
+        for r in results:
+            dist = r.get("distance") or 1.0
+            if dist > 0.6:
+                continue
+            preview = r.get("content_preview", "")
+            trust = r.get("trust_score", 0)
+            score = (1.0 - dist) * (0.5 + trust * 0.5)
+            if best is None or score > best[0]:
+                best = (score, preview, dist)
+
+        if best is None:
+            return None, None, None
+
+        _, preview, distance = best
+        title = _extract_title_phrase(preview)
+        return title, preview[:100], distance
+
+    except Exception as exc:
+        _log.warning("HRR title generation failed: %s", exc)
+        return None, None, None
+
+
+def _extract_title_phrase(text: str):
+    """Extract a short, meaningful title phrase from fact text."""
+    if not text:
+        return "Dream Session"
+
+    import re as _re
+    cleaned = _re.sub(r'\[Dream\s+\w+\s+\w+\]\s*', '', text).strip()
+    cleaned = _re.sub(r'\[.*?\]\s*', '', cleaned).strip()
+
+    prefixes = [
+        r'^resolved:\s*', r'^idea:\s*', r'^connection:\s*',
+        r'^new perspective:\s*', r'^escalation:\s*',
+        r'^the\s+', r'^a\s+', r'^an\s+',
+    ]
+    for p in prefixes:
+        cleaned = _re.sub(p, '', cleaned, flags=_re.IGNORECASE).strip()
+
+    clause = _re.split(r'[,;.!?—–]', cleaned)[0].strip()
+    words = clause.split()[:7]
+    title = " ".join(words)
+
+    if len(title) > 60:
+        title = title[:57] + "..."
+    if len(title) < 3:
+        return "Dream Session"
+
+    return title[0].upper() + title[1:]
 
 
 # ── Heartbeat (for testing) ────────────────────────────────

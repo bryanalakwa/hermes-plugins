@@ -146,43 +146,116 @@
     var outputs = entry.phase_outputs || {};
     var dreamLog = outputs.dream_log || {};
 
-    // Best: use synthesis — it's a paragraph, extract the topic
-    if (dreamLog.synthesis) {
+    // Best: use synthesis — it's a paragraph about the dream's meaning
+    if (dreamLog.synthesis && dreamLog.synthesis.length > 15) {
       return topicFromText(dreamLog.synthesis);
     }
-    // Next: key_insight
-    if (dreamLog.key_insight) {
+    // Next: key_insight — should be a single clear statement
+    if (dreamLog.key_insight && dreamLog.key_insight.length > 15) {
       return topicFromText(dreamLog.key_insight);
     }
-    // Fallback to invention phase
+
+    // Fallback to invention phase — use the highest-significance idea
     var inv = outputs.invention || {};
     var ideas = inv.novel_ideas || [];
-    if (ideas.length > 0) {
-      var firstIdea = typeof ideas[0] === "string" ? ideas[0] : (ideas[0].idea || "");
-      return topicFromText(firstIdea);
+    // Sort by significance if available, pick the best
+    var bestIdea = null;
+    var bestSig = 0;
+    for (var i = 0; i < ideas.length; i++) {
+      var idea = ideas[i];
+      var text = typeof idea === "string" ? idea : (idea.idea || "");
+      var sig = (idea && typeof idea === "object" && idea.significance) ? idea.significance : 0;
+      if (text && sig >= bestSig) {
+        bestSig = sig;
+        bestIdea = text;
+      }
     }
-    // Fallback to consolidation
+    if (bestIdea) {
+      return topicFromText(bestIdea);
+    }
+
+    // Fallback to dream_log action plan — escalate items are most interesting
+    var actionPlan = dreamLog.action_plan || {};
+    var escalate = actionPlan.escalate || [];
+    if (escalate.length > 0) {
+      var firstEsc = escalate[0];
+      var escText = typeof firstEsc === "string" ? firstEsc : (firstEsc.item || "");
+      if (escText && escText.length > 10) {
+        return "Escalation: " + topicFromText(escText);
+      }
+    }
+
+    // Fallback to consolidation — use a key connection insight
     var cons = outputs.consolidation || {};
-    if (cons.summary) {
-      return topicFromText(cons.summary);
+    var connections = cons.connections || [];
+    if (connections.length > 0) {
+      var firstConn = connections[0];
+      var insight = (firstConn && typeof firstConn === "object") ? firstConn.insight : "";
+      if (insight && insight.length > 10) {
+        return topicFromText(insight);
+      }
     }
-    // Final fallback
+
+    // Last resort
     return "Dream Session";
   }
 
   // Extract a short topic title from a paragraph of text
   function topicFromText(text) {
     if (!text) return "Dream Session";
-    // Clean up
+    // Clean up markdown artifacts and brackets
     text = text.replace(/[\[\]{}()]/g, "").trim();
-    // Take first sentence or first 8 words
+
+    // Skip common LLM filler openings to get to the meaningful content
+    var fillerPatterns = [
+      /^this dream session\s*/i,
+      /^in this dream\s*/i,
+      /^the (key )?insight from this\s*/i,
+      /^the most important (thing|insight|takeaway)\s*/i,
+      /^during this dream\s*/i,
+      /^after (reviewing|consolidating|examining)\s*/i,
+      /^across all phases\s*/i,
+      /^the (main|central|primary|core) (theme|idea|takeaway|insight)\s*/i,
+      /^dreaming about\s*/i,
+      /^consolidated\s*/i,
+      /^brief summary\s*:?\s*/i,
+    ];
+    for (var f = 0; f < fillerPatterns.length; f++) {
+      text = text.replace(fillerPatterns[f], "");
+    }
+    text = text.trim();
+
+    // Take first sentence (end of first real clause)
     var firstSentence = text.split(/[.!?]/)[0].trim();
+    // Also try to stop at semicolons and em-dashes for cleaner breaks
+    firstSentence = firstSentence.split(/[;—–]/)[0].trim();
+
     var words = firstSentence.split(/\s+/);
-    var title = words.slice(0, 8).join(" ");
+    // Skip leading connector words
+    var connectors = {"and":1,"but":1,"so":1,"yet":1,"or":1,"nor":1,"for":1,"also":1,"then":1,"thus":1,"hence":1,"since":1,"because":1,"although":1,"however":1,"moreover":1,"furthermore":1,"meanwhile":1,"still":1,"already":1,"just":1,"even":1,"now":1,"here":1,"there":1,"this":1,"that":1,"these":1,"those":1,"with":1,"from":1,"into":1,"through":1,"between":1,"after":1,"before":1,"during":1,"about":1,"against":1,"among":1,"within":1,"without":1,"across":1,"along":1,"around":1,"under":1,"over":1};
+    var startIdx = 0;
+    while (startIdx < words.length && connectors[words[startIdx].toLowerCase()]) {
+      startIdx++;
+    }
+    if (startIdx > 0 && startIdx < words.length) {
+      words = words.slice(startIdx);
+    }
+
+    // Take 4-7 words for a punchy title (was 8, which was too long)
+    var title = words.slice(0, Math.min(7, words.length)).join(" ");
+
+    // If the title is too short (< 3 words), the source text was probably garbage
+    if (words.length < 3) {
+      // Try the full first sentence instead
+      title = firstSentence;
+    }
+
     if (title.length > 65) title = title.substring(0, 62) + "...";
+    if (title.length < 2) return "Dream Session";
+
     // Capitalize first letter
-    if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
-    return title || "Dream Session";
+    title = title.charAt(0).toUpperCase() + title.slice(1);
+    return title;
   }
 
   // Generate a brief summary from phase outputs
@@ -450,7 +523,7 @@
               h("div", { className: "p-2 rounded-lg bg-purple-500/10" },
                 h(MoonIcon, { className: "w-5 h-5 text-purple-400" })),
               h("div", null,
-                h("h2", { className: "text-base font-semibold text-gray-100" }, generateEntryTitle(entry)),
+                h("h2", { className: "text-base font-semibold text-gray-100" }, entry.hrr_title || generateEntryTitle(entry)),
                 h("p", { className: "text-xs text-muted-foreground mt-0.5" },
                   entry.started_at || "\u2014",
                   " \u00b7 ", entry.memories_reviewed || 0, " memories reviewed",
@@ -531,7 +604,7 @@
         .catch(function () { setIsDeleting(false); });
     };
 
-    var title = generateEntryTitle(entry);
+    var title = entry.hrr_title || generateEntryTitle(entry);
     var summary = generateEntrySummary(entry);
     var phaseOutputs = entry.phase_outputs || {};
     var insights = entry.insights || [];

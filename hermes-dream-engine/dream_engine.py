@@ -39,6 +39,8 @@ class DreamSession:
         self.insights: List[str] = []
         self.ideas: List[str] = []
         self.contradictions_found: int = 0
+        # HRR-generated title (set during finalization)
+        self.hrr_title: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -54,6 +56,7 @@ class DreamSession:
             "insights": self.insights,
             "ideas": self.ideas,
             "contradictions_found": self.contradictions_found,
+            "hrr_title": self.hrr_title,
         }
 
 
@@ -225,7 +228,7 @@ IMPORTANT: Output at least one item per category if any exist.
 
 ### Output format (JSON):
 {{
-  "synthesis": "A paragraph connecting the themes of this dream",
+  "synthesis": "A paragraph connecting the themes of this dream — REQUIRED field, must be named exactly 'synthesis'",
   "key_insight": "The single most important takeaway",
   "action_plan": {{
     "solve_it": [{{"item": "...", "significance": 4}}],
@@ -545,7 +548,7 @@ IMPORTANT: Output at least one item per category if any exist.
                     self._insert_fact(conn, content, "dream",
                                       f"dream_revelation,dream_{session_id}", trust=0.85)
                     stored += 1
-                synthesis = result.get("synthesis", "")
+                synthesis = result.get("synthesis", "") or result.get("synmthesis", "")
                 if synthesis:
                     content = f"[Dream {session_id} synthesis] {synthesis}"
                     self._insert_fact(conn, content, "dream",
@@ -629,6 +632,9 @@ IMPORTANT: Output at least one item per category if any exist.
             f"Insights: {len(s.insights)}, "
             f"Ideas: {len(s.ideas)}."
         )
+
+        # Generate HRR-powered title
+        s.hrr_title = self._generate_hrr_title()
 
         self._append_journal(s.to_dict())
         logger.info("dream session finalized — %s", s.summary)
@@ -748,23 +754,30 @@ IMPORTANT: Output at least one item per category if any exist.
 
     @staticmethod
     def _read_facts_from_db(limit: int = 150) -> List[dict]:
-        """Read facts from the holographic memory database."""
+        """Read facts from the holographic memory database.
+
+        Self-healing: tries multiple known DB locations, returns empty list
+        on any failure rather than crashing the dream session.
+        """
         facts = []
+        # Try multiple known locations for the holographic memory DB — ordered by
+        # likelihood. The DB might be in different places depending on when it
+        # was created and which version of the installer was used.
+        candidates = [
+            Path.home() / ".hermes" / "memory_store.db",
+            Path.home() / ".hermes" / "hermes-agent" / "plugins" / "memory" / "holographic" / "memory_store.db",
+            Path.home() / ".hermes" / "backups" / "eliana" / "memory" / "memory_store.db",
+            Path.home() / ".hermes" / "backups" / "eliana" / "holographic_db" / "memory_store.db",
+        ]
+        db_path = None
+        for c in candidates:
+            if c.exists():
+                db_path = c
+                break
+        if db_path is None:
+            return facts
+
         try:
-            # Try multiple known locations for the holographic memory DB
-            candidates = [
-                Path.home() / ".hermes" / "memory_store.db",
-                Path.home() / ".hermes" / "hermes-agent" / "plugins" / "memory" / "holographic" / "memory_store.db",
-                Path.home() / ".hermes" / "backups" / "eliana" / "memory" / "memory_store.db",
-                Path.home() / ".hermes" / "backups" / "eliana" / "holographic_db" / "memory_store.db",
-            ]
-            db_path = None
-            for c in candidates:
-                if c.exists():
-                    db_path = c
-                    break
-            if db_path is None:
-                return facts
             import sqlite3
             conn = sqlite3.connect(str(db_path))
             conn.row_factory = sqlite3.Row
@@ -784,6 +797,112 @@ IMPORTANT: Output at least one item per category if any exist.
         except Exception as e:
             logger.warning("failed to read facts DB: %s", e)
         return facts
+
+    # ── HRR Title Generation ─────────────────────────────────
+
+    def _generate_hrr_title(self) -> str:
+        """Generate a contextually meaningful title using vector similarity.
+
+        Takes the dream's key insight text, searches the holographic fact store
+        for the nearest neighbor via ChromaDB, and uses that fact's content to
+        create a poetic, resonant title. Falls back to text extraction if
+        vector search is unavailable.
+        """
+        # Build the most descriptive text from this session's outputs
+        s = self._session
+        title_sources = []
+
+        # Priority: synthesis > key_insight > top invention idea > insight list
+        dl = s.phase_outputs.get("dream_log", {})
+        if dl.get("synthesis"):
+            title_sources.append(dl["synthesis"])
+        if dl.get("key_insight"):
+            title_sources.append(dl["key_insight"])
+
+        inv = s.phase_outputs.get("invention", {})
+        ideas = inv.get("novel_ideas", [])
+        if ideas:
+            # Pick the highest-significance idea
+            best = max(ideas,
+                       key=lambda x: x.get("significance", 0) if isinstance(x, dict) else 0)
+            idea_text = best.get("idea", str(best)) if isinstance(best, dict) else str(best)
+            title_sources.append(idea_text)
+
+        if s.insights:
+            title_sources.append(s.insights[0])
+
+        query_text = " ".join(title_sources[:2])
+        if not query_text or len(query_text) < 15:
+            return ""
+
+        # Try ChromaDB vector search
+        try:
+            import sys as _sys
+            _home = Path.home() / ".hermes"
+            _holo_plugin = _home / "hermes-agent" / "plugins" / "memory" / "holographic"
+            if str(_holo_plugin) not in _sys.path:
+                _sys.path.insert(0, str(_holo_plugin))
+
+            from vector_store import search as _chroma_search
+            results = _chroma_search(query_text, n_results=5)
+
+            if results:
+                # Pick best: low distance + high trust + distinctive content
+                best = None
+                best_score = -1
+                for r in results:
+                    dist = r.get("distance") or 1.0
+                    if dist > 0.7:
+                        continue  # Too weak a match
+                    trust = r.get("trust_score", 0.5)
+                    preview = r.get("content_preview", "")
+                    if not preview or len(preview) < 10:
+                        continue
+                    # Score: combination of proximity and trust
+                    score = (1.0 - dist) * 0.6 + trust * 0.4
+                    if score > best_score:
+                        best_score = score
+                        best = r
+
+                if best:
+                    raw = best.get("content_preview", "")
+                    return _hrr_title_extract_phrase(raw, s.session_id)
+
+        except ImportError:
+            logger.debug("ChromaDB not available for HRR title")
+        except Exception as e:
+            logger.debug("HRR title generation failed: %s", e)
+
+        return ""
+
+    @staticmethod
+    def _hrr_title_extract_phrase(text: str, session_id: str) -> str:
+        """Extract a clean title phrase from a fact's content preview."""
+        import re
+        # Remove bracket prefixes like [Dream abc123 synthesis]
+        cleaned = re.sub(r'\[Dream\s+\w+\s+\w+\]\s*', '', text).strip()
+        cleaned = re.sub(r'\[.*?\]\s*', '', cleaned).strip()
+
+        # Remove common prefixes
+        prefixes = [
+            r'^resolved:\s*', r'^idea:\s*', r'^connection:\s*',
+            r'^new perspective:\s*', r'^escalation:\s*',
+            r'^the\s+', r'^a\s+', r'^an\s+',
+        ]
+        for p in prefixes:
+            cleaned = re.sub(p, '', cleaned, flags=re.IGNORECASE).strip()
+
+        # Take first meaningful clause
+        clause = re.split(r'[,;.!?—–]', cleaned)[0].strip()
+        words = clause.split()[:7]
+        title = " ".join(words)
+
+        if len(title) > 60:
+            title = title[:57] + "..."
+        if len(title) < 3:
+            return ""
+
+        return title[0].upper() + title[1:]
 
     # ── Journal ─────────────────────────────────────────────
 

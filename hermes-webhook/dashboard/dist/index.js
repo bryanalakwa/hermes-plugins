@@ -26,10 +26,15 @@
   const API_BASE = "/api/plugins/hermes-webhook";
 
   async function api(path, opts) {
-    const token = window.__HERMES_SESSION_TOKEN__ || "";
-    const headers = { "Content-Type": "application/json" };
+    const token = window.__HERMES_SESSION_TOKEN__ || sessionStorage.getItem("__hermes_pw_token__") || "";
+    const headers = { "Content-Type": "application/json", ...(opts?.headers || {}) };
     if (token) headers["X-Hermes-Session-Token"] = token;
-    const res = await fetch(API_BASE + path, { headers, ...opts });
+    const res = await fetch(API_BASE + path, { ...opts, headers });
+    if (res.status === 401) {
+      sessionStorage.removeItem("__hermes_pw_token__");
+      window.location.reload();
+      return;
+    }
     if (!res.ok) {
       const text = await res.text().catch(function () { return res.statusText; });
       throw new Error(res.status + ": " + text);
@@ -95,6 +100,8 @@
 
   // --- Host Secret Section (shows webhook secret for this host) ---
   function HostSecretSection({ hostSecret }) {
+    if (!hostSecret) return null;
+
     const [revealed, setRevealed] = useState(false);
     const [copied, setCopied] = useState(false);
 
@@ -103,8 +110,6 @@
       setCopied(true);
       setTimeout(function () { setCopied(false); }, 2000);
     }, [hostSecret]);
-
-    if (!hostSecret) return null;
 
     return h("div", { className: "flex items-center gap-2 text-xs bg-amber-500/5 rounded-lg px-3 py-2 border border-amber-500/20" },
       h("span", { className: "text-amber-400 shrink-0" }, "🔑"),

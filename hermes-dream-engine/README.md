@@ -1,53 +1,85 @@
-# Dream Engine — Hermes Agent Plugin
+# Dream Engine
 
-Autonomous event-driven dreaming system with 5-state sleep detection.
+Autonomous idle-time dreaming for Hermes Agent. When you're away, the agent enters sleep-like states and runs LLM-driven dream sessions: consolidating memories, re-evaluating free associations, and surfacing insights — all without being asked.
 
-## States
+## What It Does
 
-1. **ACTIVE** — Normal operation, heartbeat timer running
-2. **IDLE** — No heartbeat for T1 (5 min default)
-3. **DORMANT** — No heartbeat for T2 (30 min cumulative)
-4. **HYPNAGOGIC** — Pre-dream prep, T4 (2 min default)
-5. **DREAMING** — Active dream session running
+- **Event-driven state machine**: Active → Idle → Dormant → Hypnagogic → Dreaming
+- **LLM-driven dream phases**: Memory consolidation, problem re-evaluation, free association &amp; invention, dream log &amp; integration
+- **Telegram escalation**: High-priority items get sent to you automatically
+- **Blog-style journal**: Human-readable titles, expandable detail modal in dashboard
+- **Holographic fact store**: Dreams make the agent smarter over time — insights accumulate across sessions
 
-## Dream Session Phases
-
-1. **Memory Consolidation** — Review recent memories, resolve contradictions
-2. **Problem Re-evaluation** — Revisit unresolved problems with fresh context
-3. **Free Association / Invention** — Generate novel ideas from distant memory pairs
-4. **Dream Log** — Audit record (always runs, even on interruption)
-
-## Installation
-
-Run `install.sh` or copy the plugin directory to `~/.hermes/plugins/hermes-dream-engine/`.
+## Install
 
 ```bash
+# From the hermes-plugins repo root:
+cd hermes-dream-engine/
+chmod +x install.sh
 ./install.sh
+systemctl --user restart hermes-gateway.service
 ```
+
+That's it. The installer handles everything:
+1. Holographic fact store setup (SQLite + FTS5)
+2. Memory directories and files
+3. Plugin file installation
+4. Dependency installation
+5. Config updates
+
+After restart, open the **Dream Engine** tab in the dashboard (port 9119).
+
+## Requirements
+
+- Hermes Agent installed at `~/.hermes/hermes-agent/`
+- Python 3.11+ venv
+- `memory.provider: holographic` in config.yaml (set automatically by installer)
 
 ## Configuration
 
-Thresholds are configurable via `config.yaml`:
+Config is managed through the dashboard UI (Config tab). Changes are persisted to `config.yaml` automatically.
 
-```yaml
-plugins:
-  hermes-dream-engine:
-    idle_threshold_seconds: 300        # T1
-    dormant_threshold_seconds: 1800    # T2
-    soak_threshold_seconds: 3000       # T3
-    hypnagogic_duration_seconds: 120   # T4
-    max_dreams_per_day: 2
-    consolidation_memory_count: 150
-    invention_sample_size: 10
+| Parameter | Default | Description |
+|---|---|---|
+| `idle_threshold_seconds` | 300 | Active → Idle (5 min) |
+| `dormant_threshold_seconds` | 1800 | Idle → Dormant (30 min) |
+| `soak_threshold_seconds` | 3000 | Dormant soak before dream gate (50 min) |
+| `hypnagogic_duration_seconds` | 120 | Pre-dream prep window (2 min) |
+| `max_dreams_per_day` | 2 | Dream quota |
+| `consolidation_memory_count` | 150 | Memories reviewed per dream |
+| `invention_sample_size` | 10 | Random memories sampled for invention |
+
+## Dashboard
+
+The dashboard tab shows:
+- **Status**: Current state, timer bars, dreams-today quota, recent transitions
+- **Journal**: Blog-style dream entries with expandable detail modal
+- **Config**: Live editing of all parameters
+
+## How Dreaming Works
+
+1. Agent activity keeps the state at **Active**
+2. After `T1` seconds of no activity → **Idle**
+3. After `T2` cumulative idle → **Dormant** (soak timer starts)
+4. After `T3` soak → **Hypnagogic** (pre-dream prep, `T4` seconds)
+5. → **Dreaming**: LLM runs 4 phases, writes journal entry, escalates if needed
+6. Back to **Active** on next heartbeat
+
+Max 2 dreams per day (resets at midnight). Quota is configurable.
+
+## Files
+
+```
+~/.hermes/hermes-agent/plugins/hermes-dream-engine/  # Plugin code
+~/.hermes/dream_engine/state.json                     # Runtime state
+~/.hermes/dream_engine/journal.json                   # Dream journal
+~/.hermes/memory_store.db                             # Holographic fact store
+~/.hermes/memories/MEMORY.md                          # Agent memory
+~/.hermes/memories/USER.md                            # User profile
 ```
 
-## Dashboard Tab
+## Troubleshooting
 
-Access the dashboard at `/dream-engine` (configured in `dashboard/manifest.json`).
-
-Features:
-- Real-time state machine visualization
-- Timer bars for idle, soak, and hypnagogic phases
-- Dream journal history
-- Manual controls (force dream, reset state, send heartbeat)
-- Configuration editor
+- **Plugin not showing in dashboard**: Restart gateway, then check `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9119/api/plugins/hermes-dream-engine/status` — should return 401
+- **Config changes not saving**: Ensure `~/.hermes/config.yaml` is writable
+- **No dreams happening**: Check the state machine — send a heartbeat via the dashboard or wait for natural idle time

@@ -6,16 +6,16 @@ Plugins for [Hermes Agent](https://github.com/NousResearch/hermes-agent) that ad
 
 | Plugin | What it does |
 |---|---|
-| [hermes-dreaming](hermes-dreaming/) | 🌙 Idle-time memory consolidation — dreams while you're away, surfaces insights worth sharing. Two-tier memory (holographic + ChromaDB). Dashboard tab at `/dreams`. |
-|| [hermes-webhook](hermes-webhook/) | 🤖 Inter-agent messaging — send/receive messages between Hermes agents over Tailscale. HMAC-SHA256 signed. Per-agent conversation view in dashboard. Sender-aware routing (agents know who sent the message). Dashboard tab at `/agents`. |
+| [hermes-dream-engine](hermes-dream-engine/) | 🌙 Autonomous dreaming — idle-time memory consolidation, problem re-evaluation, and creative invention. Event-driven state machine (Active→Idle→Dormant→Hypnagogic→Dreaming). LLM-driven dream phases. Telegram escalation for high-priority items. Blog-style journal in dashboard. |
+| [hermes-webhook](hermes-webhook/) | 🤖 Inter-agent messaging — send/receive messages between Hermes agents over Tailscale. HMAC-SHA256 signed. Per-agent conversation view in dashboard. Sender-aware routing. |
 
 ## Installing a Plugin
 
-Each plugin is self-contained. To install:
+Each plugin is self-contained with its own installer. General pattern:
 
 ```bash
 # 1. Go to the plugin directory
-cd hermes-dreaming/    # or hermes-webhook/
+cd hermes-dream-engine/    # or hermes-webhook/
 
 # 2. Run the installer
 chmod +x install.sh
@@ -25,7 +25,35 @@ chmod +x install.sh
 systemctl --user restart hermes-gateway.service
 ```
 
-Each plugin has its own `README.md` with full install instructions, configuration, and troubleshooting.
+### hermes-dream-engine
+
+The dream engine installer handles everything automatically:
+
+```bash
+cd hermes-dream-engine/
+./install.sh
+systemctl --user restart hermes-gateway.service
+```
+
+What the installer does:
+1. Sets up holographic fact store (SQLite + FTS5 + WAL)
+2. Creates memory directory structure (`~/.hermes/memories/`)
+3. Configures `memory.provider: holographic` in config.yaml
+4. Copies plugin files to `~/.hermes/hermes-agent/plugins/`
+5. Installs dependencies
+6. Verifies installation
+
+After restart, the dashboard tab appears at the **Dream Engine** tab in the web dashboard (port 9119).
+
+### hermes-webhook
+
+```bash
+cd hermes-webhook/
+./install.sh
+systemctl --user restart hermes-gateway.service
+```
+
+Requires a Tailscale Funnel URL and shared secret. See the plugin's `README.md` for configuration details.
 
 ## Requirements
 
@@ -35,8 +63,8 @@ Each plugin has its own `README.md` with full install instructions, configuratio
 
 ## Contributing
 
-Found a bug? Have an idea? Open an issue or a pull request. These plugins are built to be useful — if something doesn't work or could work better, say so.
+Found a bug? Have an idea? Open an issue or a pull request.
 
 ## License
 
-MIT — use them, fork them, improve them. Just don't blame me if your agent starts dreaming about your browser history. 😄
+MIT

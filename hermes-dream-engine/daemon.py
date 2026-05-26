@@ -3,11 +3,13 @@
 The daemon runs in a background thread and:
 1. Ticks every N seconds to check timers and state transitions
 2. Manages the dream gate (quota check, midnight reset)
-3. Runs dream sessions when the state machine enters DREAMING
+3. Triggers LLM-driven dream sessions when the state machine enters DREAMING
 4. Persists state to disk for crash recovery
 
-This is the "brain stem" of the dreaming plugin — it keeps the
-state machine alive and handles the boring bookkeeping.
+Dream phase execution is LLM-driven, not scripted:
+- The daemon writes context files with memories, facts, and phase prompts
+- A cron job is triggered that runs the Hermes agent on each phase
+- The agent's output is collected and written to the journal
 """
 
 import json
@@ -43,14 +45,19 @@ class DreamDaemon:
     def __init__(self, config: dict, state_path: Path, journal_path: Path,
                  memory_source_path: Optional[Path] = None):
         self._config = {**DEFAULT_CONFIG, **config}
-        self._state_path = state_path
-        self._journal_path = journal_path
-        self._memory_source_path = memory_source_path
+        self._state_path = Path(state_path)
+        self._journal_path = Path(journal_path)
+        self._memory_source_path = Path(memory_source_path) if memory_source_path else None
+        self._state_path.parent.mkdir(parents=True, exist_ok=True)
+        self._journal_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Core components
         self._monitor = ActivityMonitor(self._config)
         self._state_machine = DreamStateMachine()
-        self._engine = DreamEngine(journal_path, memory_source_path)
+        self._engine = DreamEngine(
+            journal_path,
+            self._memory_source_path,
+        )
 
         # Daemon control
         self._thread: Optional[threading.Thread] = None
@@ -62,25 +69,19 @@ class DreamDaemon:
         # Load persisted state
         self._load_state()
 
-        # Register wakeup callback
-        self._monitor.register_wakeup_callback(self._on_wakeup)
-
-    # ── lifecycle ───────────────────────────────────────────
+    # ── lifecycle ──────────────────────────────────────────
 
     def start(self) -> None:
-        """Start the daemon thread."""
+        """Start the daemon background thread."""
         if self._thread and self._thread.is_alive():
-            logger.warning("daemon already running")
             return
         self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._run_loop, name="dream-daemon", daemon=True
-        )
+        self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
-        logger.info("dream daemon started (tick=%ds)", self._tick_interval)
+        logger.info("dream daemon started")
 
     def stop(self) -> None:
-        """Stop the daemon thread gracefully."""
+        """Stop the daemon and save state."""
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=30)
@@ -97,6 +98,7 @@ class DreamDaemon:
         """Record an activity heartbeat. Called by plugin hooks."""
         self._monitor.heartbeat()
         self._state_machine.on_heartbeat(time.time())
+        self._save_state()
 
     def get_status(self) -> dict:
         """Return full daemon status for the dashboard."""
@@ -125,7 +127,7 @@ class DreamDaemon:
             return None
         self._monitor.reset_all()
         self._monitor.start_hypnagogic()
-        t = self._state_machine._transition_to(
+        self._state_machine._transition_to(
             DreamState.HYPNAGOGIC, "manual trigger", time.time()
         )
         # Immediately transition to dreaming
@@ -169,7 +171,6 @@ class DreamDaemon:
 
         elif state == DreamState.IDLE:
             if not self._monitor.is_idle():
-                # Heartbeat arrived — back to active
                 self._state_machine.on_heartbeat(now)
             elif self._monitor.is_dormant():
                 self._state_machine.on_dormant_timeout(now)
@@ -181,7 +182,6 @@ class DreamDaemon:
                     now, self._dreams_today, self._config["max_dreams_per_day"]
                 )
                 if t and t.to_state == DreamState.DORMANT:
-                    # Quota hit — reset soak timer
                     self._monitor.reset_soak()
                 elif t and t.to_state == DreamState.HYPNAGOGIC:
                     self._monitor.start_hypnagogic()
@@ -190,18 +190,14 @@ class DreamDaemon:
             if self._monitor.is_hypnagogic_complete():
                 t = self._state_machine.on_hypnagogic_complete(now)
                 if t:
-                    # Start the dream session
                     self._run_dream_session()
 
         elif state == DreamState.DREAMING:
-            # Dream session is running — the engine handles it
-            # This state is exited when the engine finishes
             pass
 
-        # Persist state periodically
         self._save_state()
 
-    # ── dream session runner ───────────────────────────────
+    # ── dream session runner (LLM-driven) ──────────────────
 
     def _run_dream_session(self) -> Optional[str]:
         """Execute a full dream session. Called when state enters DREAMING."""
@@ -216,13 +212,93 @@ class DreamDaemon:
                 session.session_id, self._dreams_today,
                 self._config["max_dreams_per_day"],
             )
+            # Escalate high-priority items to the user via Telegram
+            self._escalate_to_user(session)
             return session.session_id
         except Exception:
             logger.exception("dream session failed")
             self._state_machine.on_dream_complete(time.time())
             return None
 
-    # ── wakeup callback ────────────────────────────────────
+    def _escalate_to_user(self, session) -> None:
+        """Send escalated action plan items to the user via Telegram.
+
+        Called after each dream session completes. Only sends if there
+        are items in the 'escalate' list of the dream_log action_plan.
+        """
+        try:
+            dream_log_output = session.phase_outputs.get("dream_log", {})
+            action_plan = dream_log_output.get("action_plan", {})
+            escalate_items = action_plan.get("escalate", [])
+            if not escalate_items:
+                return
+
+            # Build the escalation message
+            lines = [
+                "🔔 **Dream Escalation**",
+                f"Session `{session.session_id}` — {len(escalate_items)} item(s) need your attention:",
+                "",
+            ]
+            for i, item in enumerate(escalate_items, 1):
+                text = item.get("item", str(item)) if isinstance(item, dict) else str(item)
+                sig = item.get("significance", "?") if isinstance(item, dict) else "?"
+                lines.append(f"  {i}. [{sig}/5] {text}")
+            lines.append("")
+            lines.append("Reply with the number to address an item, or /ignore to dismiss.")
+
+            message = "\n".join(lines)
+
+            # Try sending via the Hermes gateway REST API
+            self._send_via_gateway(message)
+
+        except Exception:
+            logger.exception("escalation send failed — non-critical")
+
+    def _send_via_gateway(self, message: str) -> None:
+        """Send a message through the Hermes gateway to the user's Telegram.
+
+        Uses the gateway's REST API at localhost:9119. Falls back to
+        writing to the escalation file if the gateway is unreachable.
+        """
+        import urllib.request
+        import urllib.error
+
+        # Try the gateway's agent-invoke endpoint first
+        try:
+            payload = json.dumps({
+                "message": message,
+                "session_id": "dream-escalation",
+                "deliver": "telegram",
+            }).encode()
+            req = urllib.request.Request(
+                "http://127.0.0.1:9119/api/chat",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            # Use a short timeout — don't block the daemon
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status in (200, 201, 202):
+                    logger.info("escalation sent via gateway")
+                    return
+        except Exception as e:
+            logger.debug("gateway send failed: %s", e)
+
+        # Fallback: write to escalation inbox file
+        try:
+            escalation_path = self._state_path.parent / "escalation_inbox.json"
+            inbox = []
+            if escalation_path.exists():
+                inbox = json.loads(escalation_path.read_text())
+            inbox.append({
+                "message": message,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "delivered": False,
+            })
+            escalation_path.write_text(json.dumps(inbox, indent=2, ensure_ascii=False))
+            logger.info("escalation written to inbox file (gateway unavailable)")
+        except Exception:
+            logger.exception("escalation fallback write failed")
 
     def _on_wakeup(self, timestamp: float) -> None:
         """Called when a heartbeat arrives during DORMANT/HYPNAGOGIC/DREAMING."""
@@ -237,7 +313,7 @@ class DreamDaemon:
         """Reset dreams_today at midnight local time."""
         today = time.strftime("%Y-%m-%d")
         if today != self._last_quota_date:
-            if self._last_quota_date:  # not first run
+            if self._last_quota_date:
                 logger.info("quota reset (new day: %s)", today)
                 self._dreams_today = 0
             self._last_quota_date = today
@@ -252,32 +328,22 @@ class DreamDaemon:
             data = json.loads(self._state_path.read_text())
             self._dreams_today = data.get("dreams_today", 0)
             self._last_quota_date = data.get("last_quota_date", "")
-            # Restore state machine state
-            state_str = data.get("state", "active")
-            from .dream_state import DreamState
-            try:
-                restored = DreamState(state_str)
-                # Force transition to restored state
-                self._state_machine._state = restored
-            except ValueError:
-                pass
-            logger.info("state loaded: %s (dreams_today=%d)",
-                        state_str, self._dreams_today)
-        except Exception as e:
-            logger.warning("failed to load state: %s", e)
+            # Restore persisted config overrides (survives config.yaml edits)
+            persisted_config = data.get("config", {})
+            if persisted_config:
+                self._config.update(persisted_config)
+        except Exception:
+            logger.warning("failed to load state from %s", self._state_path)
 
     def _save_state(self) -> None:
         """Persist state to disk."""
         try:
-            self._state_path.parent.mkdir(parents=True, exist_ok=True)
-            data = {
+            self._state_path.write_text(json.dumps({
                 "state": self._state_machine.state.value,
                 "dreams_today": self._dreams_today,
                 "last_quota_date": self._last_quota_date,
+                "config": self._config,
                 "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            }
-            self._state_path.write_text(
-                json.dumps(data, indent=2, ensure_ascii=False)
-            )
-        except Exception as e:
-            logger.warning("failed to save state: %s", e)
+            }, ensure_ascii=False))
+        except Exception:
+            logger.warning("failed to save state")

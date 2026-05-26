@@ -1,8 +1,8 @@
 /**
- * Dream Engine — Dashboard Plugin v1.0
+ * Dream Engine — Dashboard Plugin v1.2
  *
- * Visualizes the 5-state dreaming state machine, dream journal,
- * and provides manual controls. Calls the plugin backend at
+ * Blog-style dream journal with modal detail view, rich LLM output display,
+ * and manual controls. Calls the plugin backend at
  * /api/plugins/hermes-dream-engine/.
  *
  * Plain IIFE, no build step. Uses window.__HERMES_PLUGIN_SDK__.
@@ -30,12 +30,11 @@
 
   var API_BASE = "/api/plugins/hermes-dream-engine";
 
-  // Algorithm defaults from spec
   var ALGO_DEFAULTS = {
-    idle_threshold_seconds: 300,        // T1 = 5 min
-    dormant_threshold_seconds: 1800,    // T2 = 30 min
-    soak_threshold_seconds: 3000,       // T3 = 50 min
-    hypnagogic_duration_seconds: 120,   // T4 = 2 min
+    idle_threshold_seconds: 300,
+    dormant_threshold_seconds: 1800,
+    soak_threshold_seconds: 3000,
+    hypnagogic_duration_seconds: 120,
     max_dreams_per_day: 2,
     consolidation_memory_count: 150,
     invention_sample_size: 10
@@ -56,29 +55,59 @@
   }
 
   // --- Icons ---
-  function MoonIcon(props) {
-    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 24, height: 24, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }, props || {}),
+  function MoonIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 24, height: 24, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
       h("path", { d: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" }));
   }
-  function ZapIcon(props) {
-    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+  function ZapIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
       h("polygon", { points: "13 2 3 14 12 14 11 22 21 10 12 10 13 2" }));
   }
-  function RefreshIcon(props) {
-    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+  function RefreshIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
       h("path", { d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }),
       h("path", { d: "M21 3v5h-5" }),
       h("path", { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }),
       h("path", { d: "M8 16H3v5" }));
   }
-  function BrainIcon(props) {
-    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+  function BrainIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
       h("path", { d: "M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" }),
       h("path", { d: "M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" }));
   }
-  function BookIcon(props) {
-    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+  function BookIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
       h("path", { d: "M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" }));
+  }
+  function XIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
+      h("path", { d: "M18 6 6 18" }), h("path", { d: "m6 6 12 12" }));
+  }
+  function TrashIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
+      h("path", { d: "M3 6h18" }), h("path", { d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" }), h("path", { d: "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" }));
+  }
+  function ChevronIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
+      h("path", { d: "m6 9 6 6 6-6" }));
+  }
+  function LightbulbIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
+      h("path", { d: "M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" }),
+      h("path", { d: "M9 18h6" }), h("path", { d: "M10 22h4" }));
+  }
+  function ShieldIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
+      h("path", { d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" }));
+  }
+  function SparkleIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
+      h("path", { d: "m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" }));
+  }
+  function AlertIcon(p) {
+    return h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, p||{}),
+      h("path", { d: "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" }),
+      h("path", { d: "M12 9v4" }), h("path", { d: "M12 17h.01" }));
   }
 
   var STATE_COLORS = {
@@ -92,12 +121,82 @@
     active: "Active", idle: "Idle", dormant: "Dormant",
     hypnagogic: "Hypnagogic", dreaming: "Dreaming"
   };
+  var PHASE_LABELS = {
+    consolidation: "Memory Consolidation",
+    problem_reevaluation: "Problem Re-evaluation",
+    invention: "Free Association & Invention",
+    dream_log: "Dream Log & Integration"
+  };
+  var PHASE_ICONS = {
+    consolidation: ShieldIcon,
+    problem_reevaluation: AlertIcon,
+    invention: SparkleIcon,
+    dream_log: LightbulbIcon
+  };
 
   function fmtDuration(seconds) {
     if (seconds == null || isNaN(seconds)) return "\u2014";
     if (seconds < 60) return Math.round(seconds) + "s";
     if (seconds < 3600) return Math.round(seconds / 60) + "m " + Math.round(seconds % 60) + "s";
     return Math.round(seconds / 3600) + "h " + Math.round((seconds % 3600) / 60) + "m";
+  }
+
+  // Generate a human-readable topic title from phase outputs
+  function generateEntryTitle(entry) {
+    var outputs = entry.phase_outputs || {};
+    var dreamLog = outputs.dream_log || {};
+
+    // Best: use synthesis — it's a paragraph, extract the topic
+    if (dreamLog.synthesis) {
+      return topicFromText(dreamLog.synthesis);
+    }
+    // Next: key_insight
+    if (dreamLog.key_insight) {
+      return topicFromText(dreamLog.key_insight);
+    }
+    // Fallback to invention phase
+    var inv = outputs.invention || {};
+    var ideas = inv.novel_ideas || [];
+    if (ideas.length > 0) {
+      var firstIdea = typeof ideas[0] === "string" ? ideas[0] : (ideas[0].idea || "");
+      return topicFromText(firstIdea);
+    }
+    // Fallback to consolidation
+    var cons = outputs.consolidation || {};
+    if (cons.summary) {
+      return topicFromText(cons.summary);
+    }
+    // Final fallback
+    return "Dream Session";
+  }
+
+  // Extract a short topic title from a paragraph of text
+  function topicFromText(text) {
+    if (!text) return "Dream Session";
+    // Clean up
+    text = text.replace(/[\[\]{}()]/g, "").trim();
+    // Take first sentence or first 8 words
+    var firstSentence = text.split(/[.!?]/)[0].trim();
+    var words = firstSentence.split(/\s+/);
+    var title = words.slice(0, 8).join(" ");
+    if (title.length > 65) title = title.substring(0, 62) + "...";
+    // Capitalize first letter
+    if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
+    return title || "Dream Session";
+  }
+
+  // Generate a brief summary from phase outputs
+  function generateEntrySummary(entry) {
+    var outputs = entry.phase_outputs || {};
+    var parts = [];
+    if (outputs.consolidation && outputs.consolidation.summary) {
+      parts.push(outputs.consolidation.summary);
+    }
+    if (outputs.problem_reevaluation && outputs.problem_reevaluation.summary) {
+      parts.push(outputs.problem_reevaluation.summary);
+    }
+    if (parts.length > 0) return parts.join(" | ");
+    return entry.summary || "No summary available.";
   }
 
   // --- State Machine Viz ---
@@ -135,46 +234,359 @@
     );
   }
 
-  // --- Dream Session Card ---
-  function DreamSessionCard(props) {
+  // --- Phase Detail Section (for modal) ---
+  function PhaseSection(props) {
+    var phase = props.phase;
+    var output = props.output;
+    var Icon = PHASE_ICONS[phase] || LightbulbIcon;
+    var label = PHASE_LABELS[phase] || phase;
+    var expandedState = useState(false);
+    var isExpanded = expandedState[0];
+    var setExpanded = expandedState[1];
+
+    // Collect all meaningful content from this phase
+    var sections = [];
+
+    if (output.summary) sections.push({ title: "Summary", content: output.summary, type: "text" });
+    if (output.key_insight) sections.push({ title: "Key Insight", content: output.key_insight, type: "text" });
+    if (output.synthesis) sections.push({ title: "Synthesis", content: output.synthesis, type: "text" });
+    // Handle LLM typo: "synmthesis" instead of "synthesis"
+    if (!output.synthesis && output.synmthesis) sections.push({ title: "Synthesis", content: output.synmthesis, type: "text" });
+
+    if (output.contradictions && output.contradictions.length > 0) {
+      sections.push({
+        title: "Contradictions Found (" + output.contradictions.length + ")",
+        items: output.contradictions.map(function (c) {
+          return (c.fact_a || "").substring(0, 150) + "\n\u2192 vs \u2192\n" + (c.fact_b || "").substring(0, 150) + "\n\u21D2 Resolution: " + (c.resolution || "none");
+        }),
+        type: "items"
+      });
+    }
+
+    if (output.connections && output.connections.length > 0) {
+      sections.push({
+        title: "Connections (" + output.connections.length + ")",
+        items: output.connections.map(function (c) { return c.insight || JSON.stringify(c); }),
+        type: "items"
+      });
+    }
+
+    if (output.reconsidered && output.reconsidered.length > 0) {
+      sections.push({
+        title: "Reconsidered Problems (" + output.reconsidered.length + ")",
+        items: output.reconsidered.map(function (r) {
+          return (r.problem || "?") + "\n\u2192 " + (r.new_perspective || "") + "\n\u21D2 " + (r.resolution || "");
+        }),
+        type: "items"
+      });
+    }
+
+    if (output.creative_solutions && output.creative_solutions.length > 0) {
+      sections.push({
+        title: "Creative Solutions",
+        items: output.creative_solutions.map(function (s) {
+          return typeof s === "string" ? s : (s.item || s.idea || JSON.stringify(s));
+        }),
+        type: "items"
+      });
+    }
+
+    if (output.connections_made && output.connections_made.length > 0) {
+      sections.push({
+        title: "Unexpected Connections (" + output.connections_made.length + ")",
+        items: output.connections_made.map(function (c) {
+          return (c.item_a || "").substring(0, 120) + "\n\u2261 " + (c.unexpected_link || "") + "\n" + ((c.item_b || "").substring(0, 120));
+        }),
+        type: "items"
+      });
+    }
+
+    if (output.novel_ideas && output.novel_ideas.length > 0) {
+      sections.push({
+        title: "Novel Ideas (" + output.novel_ideas.length + ")",
+        items: output.novel_ideas.map(function (idea) {
+          var s = typeof idea === "string" ? idea : (idea.idea || "");
+          if (idea && typeof idea === "object") {
+            if (idea.potential) s += "\n[Potential: " + idea.potential + "]";
+            if (idea.notes) s += "\n" + idea.notes;
+          }
+          return s;
+        }),
+        type: "items"
+      });
+    }
+
+    if (output.problems_reviewed && output.problems_reviewed.length > 0) {
+      sections.push({
+        title: "Problems Reviewed",
+        items: output.problems_reviewed,
+        type: "items"
+      });
+    }
+
+    if (output.let_go && output.let_go.length > 0) {
+      sections.push({
+        title: "Decided to Let Go",
+        items: output.let_go,
+        type: "items"
+      });
+    }
+
+    // Action plan (dream_log phase) — priority-coded sections
+    var actionPlan = output.action_plan || {};
+    var solveItems = actionPlan.solve_it || [];
+    var escalateItems = actionPlan.escalate || [];
+    var deferItems = actionPlan.defer || [];
+    if (solveItems.length > 0) {
+      sections.push({
+        title: "Solve It (autonomous) " + solveItems.length,
+        items: solveItems.map(function (item) {
+          return typeof item === "string" ? item : (item.item || JSON.stringify(item));
+        }),
+        type: "items",
+        accent: "green"
+      });
+    }
+    if (escalateItems.length > 0) {
+      sections.push({
+        title: "Escalate (your attention needed) " + escalateItems.length,
+        items: escalateItems.map(function (item) {
+          return typeof item === "string" ? item : (item.item || JSON.stringify(item));
+        }),
+        type: "items",
+        accent: "red"
+      });
+    }
+    if (deferItems.length > 0) {
+      sections.push({
+        title: "Defer (future dreams) " + deferItems.length,
+        items: deferItems.map(function (item) {
+          return typeof item === "string" ? item : (item.item || JSON.stringify(item));
+        }),
+        type: "items",
+        accent: "gray"
+      });
+    }
+
+    // Final thoughts (dream_log phase)
+    if (output.final_thoughts) {
+      sections.push({ title: "Final Thoughts", content: output.final_thoughts, type: "text" });
+    }
+
+    if (sections.length === 0) return null;
+
+    return h("div", { className: "mb-4" },
+      h("button", {
+        onClick: function () { setExpanded(!isExpanded); },
+        className: "flex items-center gap-2 w-full text-left py-2 px-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+      },
+        h(Icon, { className: "w-4 h-4 text-purple-400 shrink-0" }),
+        h("span", { className: "text-sm font-medium flex-1" }, label),
+        h(ChevronIcon, { className: cn("w-4 h-4 transition-transform", isExpanded && "rotate-180") })
+      ),
+      isExpanded && h("div", { className: "mt-2 pl-4 space-y-3" },
+        sections.map(function (section, idx) {
+          var accentClass = "";
+          var accentBorder = "";
+          if (section.accent === "green") { accentClass = "text-emerald-400"; accentBorder = "border-emerald-500/30"; }
+          if (section.accent === "red") { accentClass = "text-amber-400"; accentBorder = "border-amber-500/30 bg-amber-500/5"; }
+          if (section.accent === "gray") { accentClass = "text-gray-400"; accentBorder = "border-gray-500/30"; }
+          var itemBgClass = "";
+          if (section.accent === "green") itemBgClass = "dream-phase-solve";
+          if (section.accent === "red") itemBgClass = "dream-phase-escalate";
+          if (section.accent === "gray") itemBgClass = "dream-phase-defer";
+          return h("div", { key: idx },
+            h("div", { className: cn("text-[10px] uppercase tracking-wider font-medium mb-1", accentClass || "text-muted-foreground") }, section.title),
+            section.type === "text"
+              ? h("p", { className: "text-xs leading-relaxed whitespace-pre-wrap text-gray-200" }, section.content)
+              : h("div", { className: "space-y-2" },
+                  section.items.map(function (item, i) {
+                    return h("div", { key: i, className: cn("text-xs rounded-md p-2.5 whitespace-pre-wrap leading-relaxed border", section.accent ? itemBgClass : "bg-white/[0.04] text-gray-300 border-white/[0.06]", section.accent ? "" : "") }, item);
+                  })
+                )
+          );
+        })
+      )
+    );
+  }
+
+  // --- Dream Detail Modal ---
+  function DreamDetailModal(props) {
     var entry = props.entry;
+    var onClose = props.onClose;
+    if (!entry) return null;
+
+    var phaseOutputs = entry.phase_outputs || {};
+    var phases = entry.phases_run || [];
+    var allSections = [];
+    phases.forEach(function (phase) {
+      if (phaseOutputs[phase]) {
+        allSections.push({ phase: phase, output: phaseOutputs[phase] });
+      }
+    });
+
+    var hasErrors = entry.errors && entry.errors.length > 0;
     var completed = entry.state_on_exit === "completed";
-    var interrupted = entry.state_on_exit === "interrupted";
-    return h(Card, null,
-      h(CardContent, { className: "pt-4" },
-        h("div", { className: "flex items-start justify-between gap-3" },
-          h("div", { className: "flex-1 min-w-0" },
-            h("div", { className: "flex items-center gap-2 mb-1" },
-              h("span", { className: "font-mono text-xs text-muted-foreground" }, "#", entry.session_id),
+
+    // Close on Escape key
+    useEffect(function () {
+      var handler = function (e) { if (e.key === "Escape") onClose(); };
+      document.addEventListener("keydown", handler);
+      return function () { document.removeEventListener("keydown", handler); };
+    }, [onClose]);
+
+    return h("div", null,
+      // Opaque backdrop — separate layer
+      h("div", { className: "dream-modal-backdrop", onClick: onClose }),
+      // Modal panel — separate layer, centered
+      h("div", { className: "dream-modal-panel" },
+        h("div", {
+          className: "dream-modal-inner",
+          onClick: function (e) { e.stopPropagation(); }
+        },
+          // Header
+          h("div", { className: "dream-modal-header" },
+            h("div", { className: "flex items-center gap-3" },
+              h("div", { className: "p-2 rounded-lg bg-purple-500/10" },
+                h(MoonIcon, { className: "w-5 h-5 text-purple-400" })),
+              h("div", null,
+                h("h2", { className: "text-base font-semibold text-gray-100" }, generateEntryTitle(entry)),
+                h("p", { className: "text-xs text-muted-foreground mt-0.5" },
+                  entry.started_at || "\u2014",
+                  " \u00b7 ", entry.memories_reviewed || 0, " memories reviewed",
+                  " \u00b7 ", (entry.phases_run || []).length, " phases"
+                )
+              )
+            ),
+            h("button", {
+              onClick: onClose,
+              className: "p-2 rounded-lg hover:bg-white/10 transition-colors text-muted-foreground hover:text-white"
+            }, h(XIcon, { className: "w-5 h-5" }))
+          ),
+
+          // Scrollable body — uses CSS class with min-height: 0 fix
+          h("div", { className: "dream-modal-body" },
+            // Status badge
+            h("div", { className: "flex items-center gap-2 mb-4" },
               h(Badge, {
                 variant: "outline",
                 className: cn("text-xs",
-                  completed ? "text-emerald-400 border-emerald-500/30" :
-                  interrupted ? "text-amber-400 border-amber-500/30" :
+                  completed && !hasErrors ? "text-emerald-400 border-emerald-500/30" :
+                  hasErrors ? "text-amber-400 border-amber-500/30" :
                   "text-red-400 border-red-500/30"
                 )
               }, entry.state_on_exit),
-              entry.dreams_today != null && h("span", { className: "text-xs text-muted-foreground" }, "(dream " + entry.dreams_today + ")")
+              entry.contradictions_found > 0 && h(Badge, { variant: "outline", className: "text-xs text-orange-400 border-orange-500/30" },
+                entry.contradictions_found + " contradictions resolved")
             ),
-            h("div", { className: "flex items-center gap-3 text-xs text-muted-foreground" },
-              h("span", null, entry.started_at || "\u2014"),
-              entry.ended_at && h("span", null, "\u2192 " + entry.ended_at)
+
+            // Phase sections
+            allSections.length > 0
+              ? allSections.map(function (section) {
+                  return h(PhaseSection, {
+                    key: section.phase,
+                    phase: section.phase,
+                    output: section.output
+                  });
+                })
+              : h("p", { className: "text-sm text-muted-foreground text-center py-8" }, "No phase output recorded."),
+
+            // Errors
+            hasErrors && h("div", { className: "mt-4 text-xs text-red-400 bg-red-500/10 rounded-lg p-3" },
+              h("div", { className: "font-medium mb-1" }, "Errors:"),
+              entry.errors.map(function (e, i) { return h("div", { key: i }, "  \u2022 " + e); })
             ),
-            entry.summary && h("p", { className: "text-xs mt-2 text-gray-300" }, entry.summary)
+
+            // Raw output for debugging
+            h("details", { className: "mt-4" },
+              h("summary", { className: "text-[10px] text-muted-foreground cursor-pointer" }, "Raw JSON Output"),
+              h("pre", { className: "text-[10px] text-muted-foreground overflow-x-auto mt-1 bg-black/20 rounded p-2 max-h-40" },
+                JSON.stringify(phaseOutputs, null, 2))
+            )
           ),
-          h("div", { className: "flex items-center gap-2 shrink-0 text-xs" },
-            entry.memories_consolidated > 0 && h(Badge, { variant: "outline", className: "text-xs" }, entry.memories_consolidated + " mem"),
-            entry.insights_generated > 0 && h(Badge, { variant: "outline", className: "text-xs text-blue-400" }, entry.insights_generated + " insights"),
-            entry.ideas_invented > 0 && h(Badge, { variant: "outline", className: "text-xs text-purple-400" }, entry.ideas_invented + " ideas")
+
+          // Footer
+          h("div", { className: "dream-modal-footer" },
+            h("span", { className: "text-[10px] text-muted-foreground" }, "Session: " + (entry.session_id || "?")),
+            h(Button, { variant: "outline", size: "sm", onClick: onClose }, "Close")
           )
-        ),
-        entry.phases_run && entry.phases_run.length > 0 && h("div", { className: "flex gap-1 mt-2 flex-wrap" },
-          entry.phases_run.map(function (phase) {
-            return h(Badge, { key: phase, variant: "outline", className: "text-[10px] py-0" }, phase);
-          })
-        ),
-        entry.errors && entry.errors.length > 0 && h("div", { className: "mt-2 text-xs text-red-400" },
-          "Errors: " + entry.errors.join("; ")
+        )
+      )
+    );
+  }
+// --- Dream Journal Entry (blog post card) ---
+  function DreamJournalEntry(props) {
+    var entry = props.entry;
+    var onOpen = props.onOpen;
+    var deletingState = useState(false);
+    var isDeleting = deletingState[0];
+    var setIsDeleting = deletingState[1];
+
+    var handleDelete = function (e) {
+      e.stopPropagation();
+      if (!confirm("Delete dream session " + entry.session_id + "?")) return;
+      setIsDeleting(true);
+      api("/journal/" + entry.session_id, { method: "DELETE" })
+        .then(function () { if (props.onDelete) props.onDelete(); })
+        .catch(function () { setIsDeleting(false); });
+    };
+
+    var title = generateEntryTitle(entry);
+    var summary = generateEntrySummary(entry);
+    var phaseOutputs = entry.phase_outputs || {};
+    var insights = entry.insights || [];
+    var ideas = entry.ideas || [];
+    var phases = entry.phases_run || [];
+    var completed = entry.state_on_exit === "completed";
+    var hasErrors = entry.errors && entry.errors.length > 0;
+
+    return h(Card, null,
+      h(CardContent, { className: "pt-4" },
+        // Clickable card — opens modal
+        h("div", {
+          onClick: function () { onOpen(entry); },
+          className: "cursor-pointer group"
+        },
+          h("div", { className: "flex items-start justify-between gap-3" },
+            h("div", { className: "flex-1 min-w-0" },
+              // Date & meta line
+              h("div", { className: "flex items-center gap-2 mb-1.5 text-[10px] text-muted-foreground" },
+                h(MoonIcon, { className: "w-3 h-3" }),
+                h("span", null, entry.started_at || "\u2014"),
+                entry.ended_at && h("span", null, "\u2026" + entry.ended_at),
+                h("span", { className: "text-muted-foreground/50" }, "|"),
+                h("span", null, entry.memories_reviewed + " memories reviewed"),
+                entry.contradictions_found > 0 && h("span", null, " | " + entry.contradictions_found + " contradictions"),
+                h(Badge, {
+                  variant: "outline",
+                  className: cn("text-[10px] ml-1",
+                    completed && !hasErrors ? "text-emerald-400 border-emerald-500/30" :
+                    hasErrors ? "text-amber-400 border-amber-500/30" :
+                    "text-red-400 border-red-500/30"
+                  )
+                }, entry.state_on_exit)
+              ),
+              // Title — human-readable topic
+              h("h3", { className: "text-sm font-semibold text-gray-200 group-hover:text-purple-300 transition-colors" }, title),
+              // Summary
+              h("p", { className: "text-xs text-muted-foreground mt-1 line-clamp-2" }, summary),
+              // Stats badges
+              h("div", { className: "flex items-center gap-1.5 mt-2 flex-wrap" },
+                insights.length > 0 && h(Badge, { variant: "outline", className: "text-[10px] text-blue-400" },
+                  h(LightbulbIcon, { className: "w-3 h-3 mr-0.5" }), insights.length + " insights"),
+                ideas.length > 0 && h(Badge, { variant: "outline", className: "text-[10px] text-purple-400" },
+                  h(SparkleIcon, { className: "w-3 h-3 mr-0.5" }), ideas.length + " ideas"),
+                phases.map(function (p) {
+                  return h(Badge, { key: p, variant: "outline", className: "text-[10px]" }, PHASE_LABELS[p] || p);
+                })
+              )
+            ),
+            // Delete button
+            h("div", { className: "flex items-center gap-1 shrink-0" },
+              h(Button, { variant: "ghost", size: "sm", onClick: handleDelete, disabled: isDeleting, title: "Delete" },
+                h(TrashIcon, { className: "w-3.5 h-3.5" }))
+            )
+          )
         )
       )
     );
@@ -198,7 +610,7 @@
     );
   }
 
-  // --- Config Editor (fixed: proper useState, no ref) ---
+  // --- Config Editor ---
   function ConfigEditor(props) {
     var merged = Object.assign({}, ALGO_DEFAULTS, props.config || {});
     var localState = useState(merged);
@@ -209,11 +621,11 @@
     var setSaving = savingState[1];
 
     var fields = [
+      { key: "max_dreams_per_day", label: "Max dreams / day", hint: "Dream sessions per day. Default: 2", min: 1, max: 10 },
       { key: "idle_threshold_seconds", label: "T1 \u2014 Idle threshold (s)", hint: "Active \u2192 Idle. Default: 300 (5 min)", min: 60, max: 3600 },
       { key: "dormant_threshold_seconds", label: "T2 \u2014 Dormant threshold (s)", hint: "Idle \u2192 Dormant (cumulative). Default: 1800 (30 min)", min: 300, max: 7200 },
-      { key: "soak_threshold_seconds", label: "T3 \u2014 Soak period (s)", hint: "Dormant soak before dream gate. Default: 3000 (50 min)", min: 600, max: 14400 },
+      { key: "soak_threshold_seconds", label: "T3 \u2014 Soak period (s)", hint: "Dormant soak before dream gate. Default: 3000 (5 min)", min: 600, max: 14400 },
       { key: "hypnagogic_duration_seconds", label: "T4 \u2014 Hypnagogic duration (s)", hint: "Pre-dream prep window. Default: 120 (2 min)", min: 30, max: 600 },
-      { key: "max_dreams_per_day", label: "Max dreams / day", hint: "Hard cap, resets at midnight. Default: 2", min: 1, max: 10 },
       { key: "consolidation_memory_count", label: "Memories to consolidate (N)", hint: "Phase 1: recent memories reviewed. Default: 150", min: 10, max: 500 },
       { key: "invention_sample_size", label: "Invention sample size (K)", hint: "Phase 3: random memories sampled. Default: 10", min: 3, max: 30 }
     ];
@@ -253,7 +665,7 @@
     );
   }
 
-  // --- Main Page (fixed: loading only blocks on initial load) ---
+  // --- Main Page ---
   function DreamEnginePage() {
     var statusState = useState(null);
     var status = statusState[0];
@@ -261,7 +673,6 @@
     var journalState = useState([]);
     var journal = journalState[0];
     var setJournal = journalState[1];
-    // FIX: separate "never loaded" from "refreshing" so auto-refresh never hides UI
     var initialLoadState = useState(true);
     var initialLoad = initialLoadState[0];
     var setInitialLoad = initialLoadState[1];
@@ -274,6 +685,10 @@
     var forcingState = useState(false);
     var forcing = forcingState[0];
     var setForcing = forcingState[1];
+    // Modal state
+    var modalEntryState = useState(null);
+    var modalEntry = modalEntryState[0];
+    var setModalEntry = modalEntryState[1];
 
     var loadData = useCallback(function () {
       setError(null);
@@ -284,7 +699,6 @@
         if (results[0]) setStatus(results[0]);
         if (results[1]) setJournal(results[1].entries || []);
         if (!results[0] && !results[1]) setError("Failed to load data");
-        // Only clear initialLoad on first successful status fetch
         if (results[0]) setInitialLoad(false);
       }).catch(function (err) {
         setError(err.message);
@@ -294,7 +708,6 @@
 
     useEffect(function () { loadData(); }, [loadData]);
 
-    // FIX: auto-refresh no longer sets loading=true, so it won't wipe the UI
     useEffect(function () {
       var interval = setInterval(loadData, 15000);
       return function () { clearInterval(interval); };
@@ -321,7 +734,6 @@
         .catch(function () {});
     }, [loadData]);
 
-    // FIX: only show loading spinner on very first load, not on auto-refresh
     if (initialLoad && !status) {
       return h("div", { className: "flex items-center justify-center py-12" },
         h("div", { className: "text-muted-foreground flex items-center gap-2" },
@@ -340,8 +752,7 @@
       h("div", { className: "flex items-center justify-between" },
         h("div", { className: "flex items-center gap-3" },
           h("div", { className: "p-2 rounded-lg bg-purple-500/10" },
-            h(MoonIcon, { className: "w-6 h-6 text-purple-400" })
-          ),
+            h(MoonIcon, { className: "w-6 h-6 text-purple-400" })),
           h("div", null,
             h("h2", { className: "text-lg font-semibold" }, "Dream Engine"),
             h("p", { className: "text-xs text-muted-foreground" },
@@ -350,15 +761,12 @@
         ),
         h("div", { className: "flex items-center gap-2" },
           h(Button, { variant: "ghost", size: "sm", onClick: loadData, title: "Refresh" },
-            h(RefreshIcon, { className: "w-3.5 h-3.5" })
-          ),
-          h(Button, { variant: "outline", size: "sm", onClick: handleHeartbeat, title: "Send heartbeat — resets idle timers" },
-            h(ZapIcon, { className: "w-3.5 h-3.5 mr-1" }), "Ping"
-          ),
+            h(RefreshIcon, { className: "w-3.5 h-3.5" })),
+          h(Button, { variant: "outline", size: "sm", onClick: handleHeartbeat, title: "Send heartbeat \u2014 resets idle timers" },
+            h(ZapIcon, { className: "w-3.5 h-3.5 mr-1" }), "Ping"),
           h(Button, { size: "sm", onClick: handleForceDream, disabled: forcing, title: "Force a dream session" },
             forcing ? "Dreaming..." : h(BrainIcon, { className: "w-3.5 h-3.5 mr-1" }),
-            forcing ? "Dreaming..." : "Force Dream"
-          )
+            forcing ? "Dreaming..." : "Force Dream")
         )
       ),
 
@@ -403,8 +811,7 @@
         h(Button, { variant: activeTab === "journal" ? "default" : "ghost", size: "sm",
           onClick: function () { setActiveTab("journal"); } },
           h(BookIcon, { className: "w-3.5 h-3.5 mr-1.5" }),
-          "Journal (" + journal.length + ")"
-        ),
+          "Journal (" + journal.length + ")"),
         h(Button, { variant: activeTab === "config" ? "default" : "ghost", size: "sm",
           onClick: function () { setActiveTab("config"); } }, "Config")
       ),
@@ -433,16 +840,21 @@
         )
       ),
 
-      // Journal tab
+      // Journal tab (blog-style entries — click opens modal)
       activeTab === "journal" && (journal.length === 0
         ? h("div", { className: "text-center py-12 text-muted-foreground" },
             h(MoonIcon, { className: "w-8 h-8 mx-auto mb-3 opacity-30" }),
             h("p", { className: "text-sm" }, "No dream sessions yet."),
             h("p", { className: "text-xs mt-1" }, "Dreams appear here after sustained dormancy.")
           )
-        : h("div", { className: "space-y-3" },
+        : h("div", { className: "space-y-4" },
             journal.map(function (entry) {
-              return h(DreamSessionCard, { key: (entry.session_id || "") + (entry.started_at || ""), entry: entry });
+              return h(DreamJournalEntry, {
+                key: (entry.session_id || "") + (entry.started_at || ""),
+                entry: entry,
+                onOpen: setModalEntry,
+                onDelete: loadData
+              });
             })
           )
       ),
@@ -455,7 +867,13 @@
         h(CardContent, null,
           h(ConfigEditor, { config: config, onSave: loadData })
         )
-      )
+      ),
+
+      // Modal
+      modalEntry && h(DreamDetailModal, {
+        entry: modalEntry,
+        onClose: function () { setModalEntry(null); }
+      })
     );
   }
 

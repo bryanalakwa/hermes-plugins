@@ -1,5 +1,5 @@
 name: hermes-dream-engine
-version: 1.0.0
+version: 1.0.1
 description: >
   Autonomous event-driven dreaming engine. State machine-based sleep detection
   with 5 states (Active → Idle → Dormant → Hypnagogic → Dreaming). Dream sessions
@@ -43,5 +43,5 @@ dependencies:
     - python3>=3.7
 dashboard:
   tab: /dream-engine
-  position: after:hermes-dreaming
+  position: after:achievements
   icon: Moon

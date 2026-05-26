@@ -84,13 +84,14 @@ def _ensure_daemon():
                 pass
 
         _plugin_dir = Path(__file__).resolve().parent
+        _pkg_dir = _plugin_dir.parent  # plugin root (where daemon.py lives)
         try:
             from .daemon import DreamDaemon
         except (ImportError, ModuleNotFoundError):
             # When loaded as a standalone file (dashboard process), add the
-            # package directory to sys.path so absolute imports work.
-            if str(_plugin_dir) not in sys.path:
-                sys.path.insert(0, str(_plugin_dir))
+            # package root to sys.path so absolute imports work.
+            if str(_pkg_dir) not in sys.path:
+                sys.path.insert(0, str(_pkg_dir))
             from daemon import DreamDaemon
         _daemon = DreamDaemon(
             config=config,
@@ -143,6 +144,16 @@ async def clear_journal():
     return {"ok": True}
 
 
+@router.delete("/journal/{session_id}")
+async def delete_journal_entry(session_id: str):
+    """Delete a specific journal entry by session_id."""
+    daemon = _get_daemon()
+    deleted = daemon._engine.delete_journal_entry(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    return {"ok": True, "session_id": session_id}
+
+
 # ── Manual controls ────────────────────────────────────────
 
 @router.post("/dream/force")
@@ -168,6 +179,33 @@ async def reset_state():
 
 # ── Configuration ──────────────────────────────────────────
 
+def _save_config_to_yaml(config: dict) -> None:
+    """Persist dream engine config back to ~/.hermes/config.yaml.
+
+    Only updates the plugins.hermes-dream-engine section, leaving
+    all other config untouched.
+    """
+    try:
+        import yaml
+        home = _get_home()
+        config_path = home / "config.yaml"
+        if not config_path.exists():
+            _log.warning("config.yaml not found — config not persisted")
+            return
+        with open(config_path) as f:
+            full_cfg = yaml.safe_load(f) or {}
+        plugins_cfg = full_cfg.setdefault("plugins", {})
+        plugin_cfg = plugins_cfg.setdefault("hermes-dream-engine", {})
+        plugin_cfg.update(config)
+        with open(config_path, "w") as f:
+            yaml.dump(full_cfg, f, default_flow_style=False, allow_unicode=True)
+        _log.info("dream engine config persisted to config.yaml")
+    except ImportError:
+        _log.warning("PyYAML not available — config not persisted to config.yaml")
+    except Exception as exc:
+        _log.warning("failed to persist config to config.yaml: %s", exc)
+
+
 @router.get("/config")
 async def get_config():
     """Get current dream engine configuration."""
@@ -177,7 +215,7 @@ async def get_config():
 
 @router.put("/config")
 async def update_config(data: dict):
-    """Update dream engine configuration."""
+    """Update dream engine configuration and persist to config.yaml."""
     daemon = _get_daemon()
     updated = {}
     for key, value in data.items():
@@ -189,6 +227,10 @@ async def update_config(data: dict):
     daemon._monitor._dormant_threshold = daemon._config.get("dormant_threshold_seconds", 1800)
     daemon._monitor._soak_threshold = daemon._config.get("soak_threshold_seconds", 3000)
     daemon._monitor._hypnagogic_duration = daemon._config.get("hypnagogic_duration_seconds", 120)
+    # Persist to config.yaml so changes survive gateway restart
+    _save_config_to_yaml(daemon._config)
+    # Also save daemon state (which includes config)
+    daemon._save_state()
     return {"ok": True, "config": daemon._config, "updated": list(updated.keys())}
 
 

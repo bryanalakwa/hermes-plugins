@@ -12,6 +12,10 @@ Provides endpoints for:
 The daemon is created lazily on first API call. In the dashboard process,
 this module owns the daemon. In the gateway process, __init__.py may also
 call set_daemon() to enable hook-based heartbeat injection.
+
+NOTE: Authentication is handled by the dashboard's global auth middleware
+(web_server.py), which validates the X-Hermes-Session-Token header on all
+/api/ routes. No per-plugin auth is needed.
 """
 
 from __future__ import annotations
@@ -337,8 +341,7 @@ def _extract_title_phrase(text: str):
         return "Dream Session"
 
     import re as _re
-    cleaned = _re.sub(r'\[Dream\s+\w+\s+\w+\]\s*', '', text).strip()
-    cleaned = _re.sub(r'\[.*?\]\s*', '', cleaned).strip()
+    cleaned = _re.sub(r'\[\w+\]\s*', '', text).strip()
 
     prefixes = [
         r'^resolved:\s*', r'^idea:\s*', r'^connection:\s*',

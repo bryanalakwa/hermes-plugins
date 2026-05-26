@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────
-# Dream Engine v1.0.1 — install.sh
+# Dream Engine v1.0.0 — install.sh
 # ─────────────────────────────────────────────────────────
 # Installs the hermes-dream-engine plugin for Hermes Agent.
 # This script:
@@ -36,7 +36,7 @@ VENV_PIP="$HERMES_AGENT/venv/bin/pip"
 CONFIG="$HERMES_HOME/config.yaml"
 
 echo ""
-echo -e "${BOLD}── Dream Engine Installer v1.0.1 ──${NC}"
+echo -e "${BOLD}── Dream Engine Installer v1.0.0 ──${NC}"
 echo ""
 
 if [ ! -f "$VENV_PYTHON" ]; then
@@ -143,7 +143,6 @@ echo ""
 
 # ══════════════════════════════════════════════════════════
 # PHASE 4: Configuration
-# ══════════════════════════════════════════════════════════
 echo ""
 echo -e "${BOLD}━━ Phase 4: Configuration ━━${NC}"
 echo ""
@@ -246,9 +245,9 @@ print('All imports OK')
 # ══════════════════════════════════════════════════════════
 echo ""
 if [ $ERRORS -eq 0 ]; then
-  echo -e "${GREEN}${BOLD}── Dream Engine v1.0.1 installed successfully ──${NC}"
+  echo -e "${GREEN}${BOLD}── Dream Engine v1.0.0 installed successfully ──${NC}"
 else
-  echo -e "${YELLOW}${BOLD}── Dream Engine v1.0.1 installed with ${ERRORS} warning(s) ──${NC}"
+  echo -e "${YELLOW}${BOLD}── Dream Engine v1.0.0 installed with ${ERRORS} warning(s) ──${NC}"
 fi
 echo ""
 echo "  Plugin:      ${PLUGIN_DEST}"

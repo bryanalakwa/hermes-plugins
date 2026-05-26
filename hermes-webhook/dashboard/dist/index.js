@@ -93,6 +93,34 @@
       h("path", { d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" }));
   }
 
+  // --- Host Secret Section (shows webhook secret for this host) ---
+  function HostSecretSection({ hostSecret }) {
+    const [revealed, setRevealed] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = useCallback(function () {
+      copyToClipboard(hostSecret);
+      setCopied(true);
+      setTimeout(function () { setCopied(false); }, 2000);
+    }, [hostSecret]);
+
+    if (!hostSecret) return null;
+
+    return h("div", { className: "flex items-center gap-2 text-xs bg-amber-500/5 rounded-lg px-3 py-2 border border-amber-500/20" },
+      h("span", { className: "text-amber-400 shrink-0" }, "🔑"),
+      h("span", { className: "text-muted-foreground shrink-0" }, "Host secret:"),
+      h("code", { className: "flex-1 text-amber-300 truncate font-mono text-xs" },
+        revealed ? hostSecret : "•".repeat(24)
+      ),
+      h(Button, { variant: "ghost", size: "sm", onClick: function () { setRevealed(!revealed); }, title: revealed ? "Hide" : "Reveal", className: "h-6 px-2 shrink-0" },
+        revealed ? "🙈" : "👁️"
+      ),
+      h(Button, { variant: "ghost", size: "sm", onClick: handleCopy, title: "Copy secret", className: "h-6 px-2 shrink-0" },
+        copied ? h(CheckIcon, { className: "w-3.5 h-3.5 text-emerald-400" }) : h(CopyIcon, { className: "w-3.5 h-3.5" })
+      )
+    );
+  }
+
   // --- Copy-to-clipboard helper (simple function, no hooks) ---
   var copiedTimer = null;
   function copyToClipboard(text) {
@@ -219,6 +247,96 @@
     );
   }
 
+  // --- Edit Agent Modal ---
+  function EditAgentModal({ agent, onSave, onClose }) {
+    const [nick, setNick] = useState(agent.nick);
+    const [url, setUrl] = useState(agent.url);
+    const [secret, setSecret] = useState(""); // empty = don't change
+    const [routePing, setRoutePing] = useState(agent.route_ping);
+    const [routeNotify, setRouteNotify] = useState(agent.route_notify);
+    const [saving, setSaving] = useState(false);
+    const [generating, setGenerating] = useState(false);
+    const [error, setError] = useState(null);
+
+    const handleGenerateSecret = useCallback(function () {
+      setGenerating(true);
+      api("/generate-secret")
+        .then(function (r) { setSecret(r.secret || ""); })
+        .catch(function () { setError("Failed to generate secret"); })
+        .finally(function () { setGenerating(false); });
+    }, []);
+
+    const handleSave = useCallback(function () {
+      if (!nick.trim() || !url.trim()) {
+        setError("Nickname and URL are required");
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      const body = { url: url.trim(), route_ping: routePing, route_notify: routeNotify };
+      if (secret.trim()) body.secret = secret.trim();
+      api("/agents/" + agent.nick, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      })
+        .then(function () { onSave(); })
+        .catch(function (err) { setError(err.message); })
+        .finally(function () { setSaving(false); });
+    }, [nick, url, secret, routePing, routeNotify, agent.nick, onSave]);
+
+    return h("div", { className: "fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4", onClick: function (e) { if (e.target === e.currentTarget) onClose(); } },
+      h(Card, { className: "max-w-lg w-full" },
+        h(CardHeader, null,
+          h("div", { className: "flex items-center justify-between" },
+            h("div", { className: "flex items-center gap-2" },
+              h("span", { className: "text-lg" }, "✏️"),
+              h(CardTitle, null, "Edit " + agent.nick)
+            ),
+            h(Button, { variant: "ghost", size: "sm", onClick: onClose }, "✕")
+          )
+        ),
+        h(CardContent, { className: "space-y-4" },
+          error && h("div", { className: "text-xs text-red-400 bg-red-500/10 rounded p-2" }, "⚠ " + error),
+
+          h("div", null,
+            h(Label, null, "Nickname"),
+            h(Input, { value: nick, onChange: function (e) { setNick(e.target.value); } })
+          ),
+          h("div", null,
+            h(Label, null, "Tailscale Funnel URL"),
+            h(Input, { placeholder: "https://agent.tailXXXXX.ts.net", value: url, onChange: function (e) { setUrl(e.target.value); } })
+          ),
+          h("div", null,
+            h("div", { className: "flex items-center justify-between mb-1" },
+              h(Label, null, "Webhook Secret"),
+              h(Button, { variant: "ghost", size: "sm", onClick: handleGenerateSecret, disabled: generating, className: "h-6 px-2 text-xs" },
+                generating ? "⏳" : "🔑", " Generate"
+              )
+            ),
+            h(Input, { type: "password", placeholder: "Leave empty to keep current secret", value: secret, onChange: function (e) { setSecret(e.target.value); } })
+          ),
+          h("div", { className: "grid grid-cols-2 gap-3" },
+            h("div", null,
+              h(Label, null, "Ping Route"),
+              h(Input, { value: routePing, onChange: function (e) { setRoutePing(e.target.value); } })
+            ),
+            h("div", null,
+              h(Label, null, "Notify Route"),
+              h(Input, { value: routeNotify, onChange: function (e) { setRouteNotify(e.target.value); } })
+            )
+          ),
+
+          h("div", { className: "flex justify-end gap-2 pt-2" },
+            h(Button, { variant: "outline", onClick: onClose }, "Cancel"),
+            h(Button, { onClick: handleSave, disabled: saving },
+              saving ? "Saving..." : "Save Changes"
+            )
+          )
+        )
+      )
+    );
+  }
+
   // --- Send Message Modal ---
   function SendMessageModal({ agent, onSend, onClose }) {
     const [mode, setMode] = useState("ping");
@@ -294,7 +412,7 @@
   }
 
   // --- Agent Card ---
-  function AgentCard({ agent, onSend, onDelete, onTest }) {
+  function AgentCard({ agent, onSend, onDelete, onEdit, onTest }) {
     const [testing, setTesting] = useState(false);
 
     const handleTest = useCallback(function () {
@@ -321,6 +439,9 @@
             )
           ),
           h("div", { className: "flex items-center gap-1.5 shrink-0" },
+            h(Button, { variant: "ghost", size: "sm", onClick: function () { onEdit(agent); }, title: "Edit agent" },
+              "✏️"
+            ),
             h(Button, { variant: "ghost", size: "sm", onClick: handleTest, disabled: testing, title: "Test connection" },
               h(RefreshIcon, { className: cn("w-3.5 h-3.5", testing && "animate-spin") })
             ),
@@ -525,6 +646,7 @@
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [showAdd, setShowAdd] = useState(false);
+    const [editingAgent, setEditingAgent] = useState(null);
     const [sendingTo, setSendingTo] = useState(null);
     const [activeTab, setActiveTab] = useState("conversations"); // "conversations" | "agents"
     const [activeConversation, setActiveConversation] = useState(null);
@@ -622,7 +744,9 @@
           h(Button, { variant: "ghost", size: "sm", onClick: function () { handleCopyUrl(identity.my_url); }, title: "Copy URL", className: "h-6 px-2 shrink-0" },
             copiedUrl ? h(CheckIcon, { className: "w-3.5 h-3.5 text-emerald-400" }) : h(CopyIcon, { className: "w-3.5 h-3.5" })
           )
-        )
+        ),
+        // Host webhook secret — share this with agents that need to send to you
+        HostSecretSection({ hostSecret: identity.host_secret || "" })
       ),
 
       // Tabs
@@ -671,6 +795,7 @@
                   key: agent.nick,
                   agent: agent,
                   onSend: setSendingTo,
+                  onEdit: setEditingAgent,
                   onDelete: handleDelete,
                   onTest: function () { api("/test/" + agent.nick, { method: "POST" }).then(function () { loadData(); }); },
                 });
@@ -683,6 +808,11 @@
         onSave: function () { setShowAdd(false); loadData(); },
         onClose: function () { setShowAdd(false); },
         myUrl: identity ? identity.my_url : "",
+      }),
+      editingAgent && h(EditAgentModal, {
+        agent: editingAgent,
+        onSave: function () { setEditingAgent(null); loadData(); },
+        onClose: function () { setEditingAgent(null); },
       }),
       sendingTo && h(SendMessageModal, {
         agent: sendingTo,

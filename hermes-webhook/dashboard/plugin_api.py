@@ -456,6 +456,7 @@ async def get_identity():
         "webhook_port": webhook_port,
         "routes": list(routes.keys()),
         "receiver_count": len(section.get("receivers", {})),
+        "host_secret": webhook_platform.get("extra", {}).get("secret", ""),
     }
 
 

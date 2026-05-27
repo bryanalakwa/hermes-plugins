@@ -26,12 +26,13 @@
   const API_BASE = "/api/plugins/hermes-webhook";
 
   async function api(path, opts) {
-    const token = window.__HERMES_SESSION_TOKEN__ || sessionStorage.getItem("__hermes_pw_token__") || "";
+    const token = window.__HERMES_SESSION_TOKEN__ || localStorage.getItem("__hermes_pw_token__") || "";
     const headers = { "Content-Type": "application/json", ...(opts?.headers || {}) };
     if (token) headers["X-Hermes-Session-Token"] = token;
     const res = await fetch(API_BASE + path, { ...opts, headers });
     if (res.status === 401) {
-      sessionStorage.removeItem("__hermes_pw_token__");
+      localStorage.removeItem("__hermes_pw_token__");
+      localStorage.removeItem("__hermes_pw_token_ts__");
       window.location.reload();
       return;
     }
@@ -100,8 +101,6 @@
 
   // --- Host Secret Section (shows webhook secret for this host) ---
   function HostSecretSection({ hostSecret }) {
-    if (!hostSecret) return null;
-
     const [revealed, setRevealed] = useState(false);
     const [copied, setCopied] = useState(false);
 
@@ -751,7 +750,7 @@
           )
         ),
         // Host webhook secret — share this with agents that need to send to you
-        HostSecretSection({ hostSecret: identity.host_secret || "" })
+        identity.host_secret && h(HostSecretSection, { hostSecret: identity.host_secret })
       ),
 
       // Tabs

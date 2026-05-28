@@ -7,36 +7,46 @@
 3. Click "Upload Book" and select a PDF, EPUB, or TXT file
 
 Supported formats:
-- `.pdf` — Portable Document Format
-- `.epub` — Electronic Publication
+- `.pdf` — Portable Document Format (PyPDF2)
+- `.epub` — Electronic Publication (EbookLib)
 - `.txt` — Plain text
 
-## Processing Books
+## Creating Skills
 
 After uploading:
-1. Click "Process" on a book to extract its text
-2. The system splits large books into chunks for LLM processing
-3. Use the chat interface to ask for key concepts, methods, and techniques
+1. Click "Create Skill" on any book in the library
+2. The system automatically:
+   - Extracts text from the book
+   - Runs LLM extraction to find key concepts/methods
+   - Generates a Hermes skill file
+3. A progress bar shows the extraction/generation status
+4. Once complete, the skill appears in the Skills tab
 
-Example prompts:
-- "What are the key concepts in this book?"
-- "Extract the main methods or frameworks described"
-- "Summarize the important techniques"
+## Viewing and Editing Skills
 
-## Generating Skills
-
-Once concepts are extracted:
-1. Click "Generate Skill" in the preview modal
-2. A skill file is created in `~/.hermes/skills/book-skills/`
-3. Load the skill anytime with: `/skill book-skills/<skill-name>`
+In the Skills tab:
+- Click the **Eye icon** to view/edit skill markdown
+- Edit the content in the modal textarea
+- Click "Save Skill" to persist changes
+- The edited skill can be loaded with `/skill book-skills/<skill-name>`
 
 ## Managing Libraries
 
 ### Books Library
-- **Process** — Extract text from a new book
-- **Regenerate Skill** — Recreate the skill if deleted
-- **Delete** — Remove book (skill remains)
+- **Create Skill** — Extract text and generate skill via LLM
+- **Delete** — Remove book (any generated skill remains)
 
 ### Skills Library
-- **Rename** — Change the skill name
-- **Delete** — Remove skill (book remains)
+- **View/Edit** — Click Eye icon to modify skill markdown
+- **Rename** — Change the skill name (updates directory/files)
+- **Delete** — Remove skill (book remains in library)
+
+## Generated Skill Format
+
+Skills are stored at `~/.hermes/skills/book-skills/<skill-name>/SKILL.md`
+
+Each skill includes:
+- YAML frontmatter (name, description, version)
+- Core concepts list
+- Methods & techniques list
+- Usage instructions for applying the skill

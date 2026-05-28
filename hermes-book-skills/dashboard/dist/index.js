@@ -216,7 +216,7 @@
       }
     };
 
-const handleViewSkill = async (skillName) => {
+    const handleViewSkill = async (skillName) => {
       // Toggle: close modal if already viewing this skill
       if (showViewModal && viewingSkill === skillName) {
         setShowViewModal(false);
@@ -311,7 +311,8 @@ const handleViewSkill = async (skillName) => {
           ),
           h("div", { className: "bs-px-6 bs-py-4 bs-flex-1 bs-overflow-hidden", style: { height: "calc(85vh - 120px)" } },
             h("textarea", {
-              className: "bs-w-full bs-h-full bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-p-4",
+              className: "bs-w-full bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-p-4",
+              style: { height: "56vh", minHeight: "56vh" },
               value: skillContent,
               onChange: (e) => setSkillContent(e.target.value),
               spellcheck: false,

@@ -43,18 +43,15 @@ def register(ctx) -> None:
     home = _get_home()
     plugin_config = _load_plugin_config()
 
-    # Paths
     state_path = home / "dream_engine" / "state.json"
     journal_path = home / "dream_engine" / "journal.json"
     memory_source = home / "dreams" / "state.json"
 
-    # Import here to avoid import-time side effects
     try:
-    from .daemon import DreamDaemon
-except ImportError:
-    from daemon import DreamDaemon
+        from .daemon import DreamDaemon
+    except ImportError:
+        from daemon import DreamDaemon
 
-    # Create and start daemon
     _daemon = DreamDaemon(
         config=plugin_config,
         state_path=state_path,
@@ -62,15 +59,12 @@ except ImportError:
         memory_source_path=memory_source if memory_source.exists() else None,
     )
 
-    # Register hooks
     ctx.register_hook("pre_gateway_dispatch", _on_gateway_dispatch)
     ctx.register_hook("pre_tool_call", _on_tool_call)
 
-    # Start the daemon loop
     _daemon.start()
     _log.info("hermes-dream-engine: plugin loaded, daemon started")
 
-    # Inject daemon reference into plugin_api
     try:
         from . import plugin_api
         plugin_api.set_daemon(_daemon)

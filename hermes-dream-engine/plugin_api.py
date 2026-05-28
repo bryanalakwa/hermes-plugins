@@ -29,6 +29,18 @@ except ImportError:
         val = (_os.environ.get("HERMES_HOME") or "").strip()
         return Path(val) if val else Path.home() / ".hermes"
 
+# Import shared escalation module
+try:
+    from .scripts.escalate import (
+        queue_escalation, get_pending, mark_delivered, resolve_escalation,
+        format_escalation_message
+    )
+except ImportError:
+    from scripts.escalate import (
+        queue_escalation, get_pending, mark_delivered, resolve_escalation,
+        format_escalation_message
+    )
+
 try:
     from fastapi import APIRouter, HTTPException, Query
 except Exception:
@@ -194,3 +206,26 @@ async def send_heartbeat():
     daemon = _get_daemon()
     daemon.heartbeat()
     return {"ok": True, "timestamp": time.time()}
+
+
+# ── Escalation ───────────────────────────────────────────────
+
+@router.get("/escalation/pending")
+async def get_pending_escalations():
+    """Get undelivered escalations (for gateway adapters)."""
+    pending = get_pending()
+    return {"entries": pending, "total": len(pending)}
+
+
+@router.post("/escalation/mark-delivered")
+async def mark_escalation_delivered(action_id: str):
+    """Mark an escalation as delivered after sending."""
+    success = mark_delivered(action_id)
+    return {"ok": success}
+
+
+@router.post("/escalation/resolve")
+async def resolve_escalation_endpoint(action_id: str, resolution: str):
+    """Resolve an escalation with user guidance or dismissal."""
+    success = resolve_escalation(action_id, resolution)
+    return {"ok": success}

@@ -13,7 +13,7 @@
   const React = SDK.React;
   const h = React.createElement;
   const { useState, useEffect, useCallback, useRef } = SDK.hooks;
-  const { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Label, Textarea } = SDK.components;
+  const { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Label } = SDK.components;
 
   const API_BASE = "/api/plugins/hermes-book-skills";
 
@@ -295,26 +295,24 @@
     const SkillViewModal = () => {
       if (!showViewModal || !viewingSkill) return null;
 
-      return h("div", { className: "bs-fixed bs-inset-0 bs-z-50 bs-bg-black/60 bs-flex bs-items-center bs-justify-center bs-p-4" },
-        h(Card, { className: "bs-max-w-4xl bs-w-full bs-max-h-[95vh] bs-flex bs-flex-col" },
-          h(CardHeader, null,
-            h("div", { className: "bs-flex bs-items-center bs-justify-between" },
-              h("div", { className: "bs-flex bs-items-center bs-gap-2" },
-                h(BookIcon, { className: "bs-w-5 bs-h-5 bs-text-amber-400" }),
-                h(CardTitle, null, "Edit: " + viewingSkill.replace(/-/g, " "))
-              ),
-              h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "✕")
-            )
+      return h("div", { className: "bs-fixed bs-inset-0 bs-z-50 bs-bg-black/80 bs-flex bs-items-center bs-justify-center bs-p-4" },
+        h("div", { className: "bs-bg-card bs-rounded-lg bs-border bs-border-border bs-w-full bs-max-w-4xl bs-max-h-[90vh] bs-flex bs-flex-col" },
+          h("div", { className: "bs-flex bs-items-center bs-justify-between bs-p-4 bs-border-b bs-border-border bs-flex-shrink-0" },
+            h("div", { className: "bs-flex bs-items-center bs-gap-2" },
+              h(BookIcon, { className: "bs-w-5 bs-h-5 bs-text-amber-400" }),
+              h("h2", { className: "bs-text-lg bs-font-bold bs-m-0" }, "Edit: " + viewingSkill.replace(/-/g, " "))
+            ),
+            h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "✕")
           ),
-          h(CardContent, { className: "bs-flex-1 bs-min-h-[70vh] bs-max-h-[75vh] bs-overflow-y-auto bs-pb-4" },
+          h("div", { className: "bs-p-4 bs-flex-1 bs-overflow-y-auto bs-min-h-[70vh]" },
             h("textarea", {
-              className: "bs-w-full bs-h-full bs-min-h-[65vh] bs-bg-secondary bs-text-xs bs-font-mono bs-p-3 bs-rounded bs-resize-none bs-overflow-y-auto",
+              className: "bs-w-full bs-min-h-[65vh] bs-bg-secondary bs-text-xs bs-font-mono bs-p-3 bs-rounded bs-resize-y bs-overflow-y-auto",
               value: skillContent,
               onChange: (e) => setSkillContent(e.target.value),
               spellcheck: false,
             })
           ),
-          h(CardContent, { className: "bs-pt-3 bs-border-t bs-border-border bs-flex bs-justify-end bs-gap-2 bs-flex-shrink-0" },
+          h("div", { className: "bs-flex bs-justify-end bs-gap-2 bs-p-4 bs-border-t bs-border-border bs-flex-shrink-0" },
             h(Button, { variant: "ghost", onClick: () => setShowViewModal(false) }, "Cancel"),
             h(Button, { variant: "default", onClick: handleSaveSkill }, "Save Skill")
           )

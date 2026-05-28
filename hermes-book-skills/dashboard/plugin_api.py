@@ -126,12 +126,11 @@ def _chunk_text(text: str, max_tokens: int = 4000) -> List[str]:
 def _extract_key_concepts(text: str) -> dict:
     """Extract key concepts and methods from book text using LLM.
     
-    Calls the hermes LLM to extract actionable concepts, methods, and techniques.
+    Calls the hermes chat process to extract actionable concepts, methods, and techniques.
     """
-    try:
-        from hermes_agent import AIAgent
-        agent = AIAgent()
-        prompt = f"""Extract the most important concepts, methods, and techniques from this book text. Return ONLY valid JSON:
+    import subprocess
+    
+    prompt = f"""Extract the most important concepts, methods, and techniques from this book text. Return ONLY valid JSON:
 
 {{
   "concepts": ["concept 1", "concept 2", ... up to 10],
@@ -144,8 +143,20 @@ Focus on actionable frameworks, principles, and methods. Remove duplicates.
 BOOK TEXT (first 10k chars):
 {text[:10000]}
 """
-        result = agent.run(prompt, max_tokens=2000)
-        match = re.search(r"\{[\s\S]*\}", result)
+    
+    try:
+        # Use hermes -z to process the prompt
+        result = subprocess.run(
+            ["hermes", "-z", prompt, "--yolo"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        
+        output = result.stdout
+        
+        # Extract JSON from response
+        match = re.search(r"\{[\s\S]*\}", output)
         if match:
             try:
                 data = json.loads(match.group())

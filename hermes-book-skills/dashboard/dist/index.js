@@ -14,7 +14,6 @@
   const h = React.createElement;
   const { useState, useEffect, useCallback, useRef } = SDK.hooks;
   const { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Label, Textarea } = SDK.components;
-  const { cn } = SDK.utils;
 
   const API_BASE = "/api/plugins/hermes-book-skills";
 
@@ -56,11 +55,6 @@
     h("path", { d: "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" })
   );
 
-  const RefreshIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
-    h("path", { d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }),
-    h("path", { d: "M21 3v5h-5" })
-  );
-
   const EditIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
     h("path", { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" }),
     h("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 7.5-8.5z" })
@@ -72,23 +66,19 @@
 
     const handleChange = (e) => {
       onUpload(e);
-      setInputKey(Date.now()); // Reset input
+      setInputKey(Date.now());
     };
 
-    return h("div", { className: "bs-inline-block" },
-      h(Button, { variant: "default", size: "sm", disabled: disabled, asChild: true },
-        h("label", { className: "bs-cursor-pointer bs-flex bs-items-center bs-gap-1 bs-m-0 bs-p-0", style: { cursor: "pointer" } },
-          h("input", {
-            key: inputKey,
-            type: "file",
-            accept: ".pdf,.epub,.txt,.mobi,.azw",
-            onChange: handleChange,
-            className: "bs-hidden",
-          }),
-          h(UploadIcon, { className: "bs-w-4 bs-h-4" }),
-          "Upload Book"
-        )
-      )
+    return h("label", { className: "bs-cursor-pointer bs-inline-flex bs-items-center bs-gap-1 bs-bg-blue-500 bs-text-white bs-px-3 bs-py-1 bs-rounded bs-text-sm bs-font-medium", style: { cursor: "pointer" } },
+      h("input", {
+        key: inputKey,
+        type: "file",
+        accept: ".pdf,.epub,.txt,.mobi,.azw",
+        onChange: handleChange,
+        className: "bs-hidden",
+      }),
+      h(UploadIcon, { className: "bs-w-4 bs-h-4" }),
+      "Upload Book"
     );
   }
 
@@ -132,16 +122,8 @@
       setProcessing(true);
       setError(null);
 
-      try {
-        // Note: Actual file upload needs backend file handling
-        // For now, just notify and refresh
-        setSuccess("Book uploaded. Click 'Create Skill' to extract content and generate a skill.");
-        fetchBooks();
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setProcessing(false);
-      }
+      // For now, instruct user to place file in library directory
+      setSuccess("Selected: " + file.name + ". Place this file in ~/.hermes/book-library/ then click 'Refresh' or reload the dashboard.");
     };
 
     const handleCreateSkill = async (book) => {
@@ -249,7 +231,7 @@
         h(Card, { className: "bs-w-full" },
           h(CardContent, { className: "bs-p-0" },
             books.length === 0 ?
-              h("div", { className: "bs-p-6 bs-text-center bs-text-muted-foreground" }, "No books uploaded yet.") :
+              h("div", { className: "bs-p-6 bs-text-center bs-text-muted-foreground" }, "No books uploaded yet. Place files in ~/.hermes/book-library/") :
               h("div", { className: "bs-divide-y" },
                 books.map((book) =>
                   h("div", { key: book.id, className: "bs-flex bs-items-center bs-justify-between bs-p-3 bs-gap-3" },
@@ -362,8 +344,7 @@
           ),
           h(CardContent, { className: "bs-space-y-4" },
             h("div", { className: "bs-text-xs bs-text-muted-foreground bs-bg-amber-500/5 bs-rounded bs-p-3 bs-mb-3" },
-              "Extracted " + (typeof previewData.total_chunks === "number" ? previewData.total_chunks : 0) + " chunks (" + (typeof previewData.total_length === "number" ? previewData.total_length : 0) + " chars). " +
-              "Use the chat interface to ask for key concepts, then generate the skill."
+              "Extracted " + (typeof previewData.total_chunks === "number" ? previewData.total_chunks : 0) + " chunks (" + (typeof previewData.total_length === "number" ? previewData.total_length : 0) + " chars). "
             ),
 
             h(Button, {

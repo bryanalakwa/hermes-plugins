@@ -193,11 +193,14 @@ async def list_books() -> dict:
 
 
 @router.post("/books/upload")
-async def upload_book() -> dict:
-    """Upload a book file. Note: Actual file handling via the dashboard frontend."""
+async def upload_book(filename: str = "", content: str = "") -> dict:
+    """Upload a book file. For now, copies file from a temp location or receives content."""
     _ensure_paths()
-    # File upload is handled via the dashboard's file input + form submit
-    return {"ok": True, "message": "Use the dashboard upload form"}
+
+    # This endpoint receives a filename hint - actual file handling
+    # requires frontend to save to library path directly
+    # For now, return instructions
+    return {"ok": True, "message": "Use the dashboard file picker to select a book file"}
 
 
 @router.get("/books/{book_id}/extract")

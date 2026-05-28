@@ -60,6 +60,10 @@
     h("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 7.5-8.5z" })
   );
 
+  const CheckIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "M20 6L9 17l-5-5" })
+  );
+
   // --- File upload handler component ---
   function FileUploadButton({ onUpload, disabled }) {
     const [inputKey, setInputKey] = useState(Date.now());
@@ -82,16 +86,25 @@
     );
   }
 
+  // --- Progress Bar Component ---
+  function ProgressBar({ progress, status }) {
+    return h("div", { className: "bs-w-full bs-bg-secondary bs-rounded-full bs-h-2 bs-overflow-hidden bs-mb-3" },
+      h("div", {
+        className: "bs-h-full bs-bg-blue-500 bs-transition-all bs-duration-300",
+        style: { width: progress + "%" }
+      })
+    );
+  }
+
   // --- Main Component ---
   function BookSkillsApp() {
     const [activeTab, setActiveTab] = useState("books");
     const [books, setBooks] = useState([]);
     const [skills, setSkills] = useState([]);
     const [initialLoad, setInitialLoad] = useState(true);
-    const [selectedBook, setSelectedBook] = useState(null);
-    const [showPreview, setShowPreview] = useState(false);
-    const [previewData, setPreviewData] = useState(null);
     const [processing, setProcessing] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [progressStatus, setProgressStatus] = useState("");
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
@@ -121,6 +134,8 @@
 
       setProcessing(true);
       setError(null);
+      setProgress(25);
+      setProgressStatus("Uploading file...");
 
       const token = window.__HERMES_SESSION_TOKEN__ || localStorage.getItem("__hermes_pw_token__") || "";
       const formData = new FormData();
@@ -142,54 +157,43 @@
         const result = await res.json();
         if (!res.ok) throw new Error(result.detail || res.statusText);
 
-        setSuccess("Uploaded: " + result.uploaded + ". Click 'Create Skill' to extract and generate a skill.");
+        setProgress(100);
+        setProgressStatus("Done!");
+        setSuccess("Uploaded: " + result.uploaded + ". Click 'Create Skill' to generate a skill.");
         fetchBooks();
       } catch (err) {
         setError(err.message);
       } finally {
         setProcessing(false);
+        setTimeout(() => { setProgress(0); setProgressStatus(""); }, 2000);
       }
     };
 
     const handleCreateSkill = async (book) => {
       setProcessing(true);
       setError(null);
-      setSelectedBook(book);
+      setProgress(0);
+      setProgressStatus("Extracting text...");
 
       try {
+        setProgress(25);
         const data = await api("/books/" + encodeURIComponent(book.id) + "/extract");
-        setPreviewData(data);
-        setShowPreview(true);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setProcessing(false);
-      }
-    };
+        setProgress(50);
+        setProgressStatus("Running LLM extraction...");
 
-    const handleGenerateSkill = async () => {
-      setProcessing(true);
-      setError(null);
+        const res = await api("/books/" + encodeURIComponent(book.id) + "/create", { method: "POST" });
 
-      try {
-        const res = await api("/books/" + encodeURIComponent(selectedBook.id) + "/generate", {
-          method: "POST",
-          body: JSON.stringify({
-            concepts: previewData?.concepts || [],
-            methods: previewData?.methods || [],
-            techniques: previewData?.techniques || [],
-            skill_name: selectedBook.id,
-          }),
-        });
+        setProgress(100);
+        setProgressStatus("Skill created!");
+        setSuccess("Skill generated: " + res.skill_name + " (" + (res.extraction?.concepts?.length || 0) + " concepts, " + (res.extraction?.methods?.length || 0) + " methods)");
 
-        setSuccess("Skill generated: " + res.skill_name);
-        setShowPreview(false);
         fetchSkills();
         fetchBooks();
       } catch (err) {
         setError(err.message);
       } finally {
         setProcessing(false);
+        setTimeout(() => { setProgress(0); setProgressStatus(""); }, 3000);
       }
     };
 
@@ -243,7 +247,9 @@
               "Upload PDF, EPUB, or TXT books to generate reusable Hermes skills."
             )
           )
-        )
+        ),
+        progress > 0 && h(ProgressBar, { progress, status: progressStatus }),
+        progressStatus && h("div", { className: "bs-text-xs bs-text-muted-foreground bs-mb-2" }, progressStatus)
       );
     };
 
@@ -337,7 +343,7 @@
 
     return h("div", { className: "bs-max-w-4xl bs-mx-auto" },
       error && h("div", { className: "bs-text-xs bs-text-red-400 bs-bg-red-500/10 bs-rounded bs-p-2 bs-mb-4" }, "⚠ " + error),
-      success && h("div", { className: "bs-text-xs bs-text-green-400 bs-bg-green-500/10 bs-rounded bs-p-2 bs-mb-4" }, "✓ " + success),
+      success && h("div", { className: "bs-text-xs bs-text-green-400 bs-bg-green-500/10 bs-rounded bs-p-2 bs-mb-4" }, h(CheckIcon, { className: "bs-inline bs-w-3 bs-h-3 bs-mr-1" }), success),
 
       h(HeaderSection),
 
@@ -354,32 +360,7 @@
         }, "Skills (" + skills.length + ")")
       ),
 
-      activeTab === "books" ? renderBooksTab() : renderSkillsTab(),
-
-      showPreview && previewData && h("div", { className: "bs-fixed bs-inset-0 bs-z-50 bs-bg-black/60 bs-flex bs-items-center bs-justify-center bs-p-4" },
-        h(Card, { className: "bs-max-w-2xl bs-w-full bs-max-h-[80vh] bs-overflow-y-auto" },
-          h(CardHeader, null,
-            h("div", { className: "bs-flex bs-items-center bs-justify-between" },
-              h("div", { className: "bs-flex bs-items-center bs-gap-2" },
-                h(BookIcon, { className: "bs-w-5 bs-h-5 bs-text-amber-400" }),
-                h(CardTitle, null, typeof selectedBook?.name === "string" ? "Create Skill: " + selectedBook.name : "Create Skill")
-              ),
-              h(Button, { variant: "ghost", size: "sm", onClick: () => setShowPreview(false) }, "✕")
-            )
-          ),
-          h(CardContent, { className: "bs-space-y-4" },
-            h("div", { className: "bs-text-xs bs-text-muted-foreground bs-bg-amber-500/5 bs-rounded bs-p-3 bs-mb-3" },
-              "Extracted " + (typeof previewData.total_chunks === "number" ? previewData.total_chunks : 0) + " chunks (" + (typeof previewData.total_length === "number" ? previewData.total_length : 0) + " chars)."
-            ),
-
-            h(Button, {
-              variant: "default",
-              onClick: handleGenerateSkill,
-              disabled: processing,
-            }, processing ? "Generating..." : "Generate Skill")
-          )
-        )
-      )
+      activeTab === "books" ? renderBooksTab() : renderSkillsTab()
     );
   }
 

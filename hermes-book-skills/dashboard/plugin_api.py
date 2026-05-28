@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -123,14 +124,43 @@ def _chunk_text(text: str, max_tokens: int = 4000) -> List[str]:
 # ── Skill generation ─────────────────────────────────────
 
 def _extract_key_concepts(text: str) -> dict:
-    """Extract key concepts and methods from book text using LLM."""
-    # This would be called via the agent's LLM - for now return placeholder
-    # The actual LLM call happens in the frontend via the chat endpoint
-    return {
-        "concepts": ["extraction via LLM pending"],
-        "methods": ["structured extraction pending"],
-        "techniques": ["pending"],
-    }
+    """Extract key concepts and methods from book text using LLM.
+    
+    Calls the hermes LLM to extract actionable concepts, methods, and techniques.
+    """
+    try:
+        from hermes_agent import AIAgent
+        agent = AIAgent()
+        prompt = f"""Extract the most important concepts, methods, and techniques from this book text. Return ONLY valid JSON:
+
+{{
+  "concepts": ["concept 1", "concept 2", ... up to 10],
+  "methods": ["method 1", "method 2", ... up to 10],
+  "techniques": ["technique 1", "technique 2", ... up to 10]
+}}
+
+Focus on actionable frameworks, principles, and methods. Remove duplicates.
+
+BOOK TEXT (first 10k chars):
+{text[:10000]}
+"""
+        result = agent.run(prompt, max_tokens=2000)
+        match = re.search(r"\{[\s\S]*\}", result)
+        if match:
+            try:
+                data = json.loads(match.group())
+                return {
+                    "concepts": (data.get("concepts") or [])[:10],
+                    "methods": (data.get("methods") or [])[:10],
+                    "techniques": (data.get("techniques") or [])[:10],
+                }
+            except json.JSONDecodeError:
+                pass
+    except Exception:
+        pass
+    
+    # Fallback: return empty lists
+    return {"concepts": [], "methods": [], "techniques": []}
 
 
 def _generate_skill_content(book_title: str, concepts: list, methods: list, techniques: list) -> str:
@@ -229,7 +259,7 @@ async def upload_book(file: UploadFile = File(...)) -> dict:
 
 @router.get("/books/{book_id}/extract")
 async def extract_book(book_id: str) -> dict:
-    """Extract raw text from a book for LLM processing."""
+    """Extract raw text from a book and run LLM extraction."""
     _ensure_paths()
     
     # Find the book file
@@ -245,12 +275,76 @@ async def extract_book(book_id: str) -> dict:
     text = _read_book(book_file)
     chunks = _chunk_text(text, max_tokens=4000)
     
+    # Extract concepts with LLM
+    extraction = _extract_key_concepts(text)
+    
     return {
         "book_id": book_id,
         "title": book_file.name,
         "total_chunks": len(chunks),
         "chunks": chunks[:5],  # First 5 chunks preview
         "total_length": len(text),
+        "concepts": extraction["concepts"],
+        "methods": extraction["methods"],
+        "techniques": extraction["techniques"],
+    }
+
+
+@router.post("/books/{book_id}/create")
+async def create_skill(book_id: str) -> dict:
+    """Full pipeline: extract text, run LLM, generate skill."""
+    _ensure_paths()
+    
+    # Find the book file
+    book_file = None
+    for f in LIBRARY_PATH.iterdir():
+        if f.is_file() and f.stem == book_id:
+            book_file = f
+            break
+    
+    if not book_file:
+        raise HTTPException(status_code=404, detail=f"Book '{book_id}' not found")
+    
+    # Extract text
+    text = _read_book(book_file)
+    
+    # Run LLM extraction
+    extraction = _extract_key_concepts(text)
+    
+    # Generate and save skill
+    skill_name = book_id.replace(" ", "-").lower()
+    skill_content = _generate_skill_content(
+        book_file.name,
+        extraction["concepts"],
+        extraction["methods"],
+        extraction["techniques"]
+    )
+    
+    skill_dir = SKILLS_PATH / skill_name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text(skill_content)
+    
+    # Update state
+    state = _load_state()
+    if "generated" not in state:
+        state["generated"] = {}
+    state["generated"][book_id] = {
+        "book_name": book_file.name,
+        "skill_name": skill_name,
+        "generated_at": time.strftime("%Y-%m-%d %H:%M"),
+        "concepts_count": len(extraction["concepts"]),
+        "methods_count": len(extraction["methods"]),
+        "techniques_count": len(extraction["techniques"]),
+    }
+    _save_state(state)
+    
+    return {
+        "ok": True,
+        "skill_name": skill_name,
+        "path": str(skill_file),
+        "extraction": extraction,
     }
 
 

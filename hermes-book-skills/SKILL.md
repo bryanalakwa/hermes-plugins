@@ -14,7 +14,11 @@ metadata:
     references:
       - references/usage.md
     scripts:
-      - scripts/process_book.py
+      - scripts/extract_concepts.py
+      - scripts/save_book.py
+    dashboard:
+      - dashboard/dist/index.js
+      - dashboard/plugin_api.py
 ---
 
 # BookSkills Plugin
@@ -34,19 +38,20 @@ Access via `/books` tab in the Hermes web dashboard (port 9119).
 
 ### Workflow
 
-1. **Upload** a book via the file picker
-2. **Process** to extract text chunks
-3. **Chat with the agent** to analyze the book and extract key concepts
-4. **Generate Skill** to create a reusable Hermes skill
-5. **Manage**: Books list and Skills list maintain independent lifecycles
+1. **Upload** a book via the file picker (auto-saved to `~/.hermes/book-library/`)
+2. **Create Skill** — extracts text and runs LLM concept extraction automatically
+3. **Skill Generated** appears — view/edit the skill markdown in the Skills tab
+4. **Manage**: Books and skills maintain independent lifecycles (delete one without affecting the other)
 
 ## API Endpoints
 
 - `GET /api/plugins/hermes-book-skills/books` — List uploaded books
-- `POST /api/plugins/hermes-book-skills/books/upload` — Upload book
-- `GET /api/plugins/hermes-book-skills/books/{id}/extract` — Extract text
-- `POST /api/plugins/hermes-book-skills/books/{id}/generate` — Generate skill
+- `POST /api/plugins/hermes-book-skills/books/upload` — Upload and save book
+- `GET /api/plugins/hermes-book-skills/books/{id}/extract` — Extract text + LLM concepts
+- `POST /api/plugins/hermes-book-skills/books/{id}/create` — Full pipeline (extract + generate)
 - `GET /api/plugins/hermes-book-skills/skills` — List generated skills
+- `GET /api/plugins/hermes-book-skills/skills/{name}/content` — Get skill markdown for editing
+- `PUT /api/plugins/hermes-book-skills/skills/{name}/content` — Save edited skill
 - `DELETE /api/plugins/hermes-book-skills/books/{id}` — Delete book
 - `DELETE /api/plugins/hermes-book-skills/skills/{name}` — Delete skill
 - `PUT /api/plugins/hermes-book-skills/skills/{name}/rename` — Rename skill

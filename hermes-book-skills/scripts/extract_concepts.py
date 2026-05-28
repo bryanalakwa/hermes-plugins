@@ -11,12 +11,12 @@ def extract_concepts_with_llm(text: str) -> dict:
     prompt = """Extract the most important concepts, methods, and techniques from this book excerpt. Return ONLY valid JSON:
 
 {{
-  "concepts": ["concept 1", "concept 2", ... up to 10],
-  "methods": ["method 1", "method 2", ... up to 10],
-  "techniques": ["technique 1", "technique 2", ... up to 10]
+  "concepts": ["short phrase: 1-sentence actionable definition for other AIs"],
+  "methods": ["short phrase: 1-sentence actionable definition for other AIs"],
+  "techniques": ["short phrase: 1-sentence actionable definition for other AIs"]
 }}
 
-Focus on actionable frameworks, principles, and methods the reader would want to apply.
+IMPORTANT: Each item must be a SHORT descriptive phrase (5-8 words max) followed by a colon and a 1-sentence actionable definition that any AI can understand and apply.
 
 BOOK TEXT:
 {{}}""".format(text[:15000])

@@ -21,6 +21,7 @@ except ImportError:
 
 try:
     from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+    from fastapi.responses import JSONResponse
 except Exception:
     class APIRouter:
         def get(self, *_args, **_kwargs):
@@ -31,6 +32,9 @@ except Exception:
             return lambda fn: fn
         def delete(self, *_args, **_kwargs):
             return lambda fn: fn
+
+    def UploadFile(*args, **kwargs):
+        pass
 
 router = APIRouter()
 
@@ -193,14 +197,34 @@ async def list_books() -> dict:
 
 
 @router.post("/books/upload")
-async def upload_book(filename: str = "", content: str = "") -> dict:
-    """Upload a book file. For now, copies file from a temp location or receives content."""
+async def upload_book(file: UploadFile = File(...)) -> dict:
+    """Upload a book file and save to library."""
     _ensure_paths()
 
-    # This endpoint receives a filename hint - actual file handling
-    # requires frontend to save to library path directly
-    # For now, return instructions
-    return {"ok": True, "message": "Use the dashboard file picker to select a book file"}
+    if not file:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+
+    # Read file content
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    # Save to library
+    safe_name = file.filename.replace("/", "_").replace("\\", "_")
+    dest = LIBRARY_PATH / safe_name
+
+    # Check for existing file with same name
+    if dest.exists():
+        base = dest.stem
+        ext = dest.suffix
+        counter = 1
+        while dest.exists():
+            dest = LIBRARY_PATH / f"{base}_{counter}{ext}"
+            counter += 1
+
+    dest.write_bytes(content)
+
+    return {"ok": True, "uploaded": dest.name, "path": str(dest)}
 
 
 @router.get("/books/{book_id}/extract")

@@ -1,13 +1,8 @@
 /**
- * Inter-Agent Webhook — Dashboard Plugin v2.1
+ * Inter-Agent Webhook — Dashboard Plugin v1.0.0
  *
  * Manage agent connections, send messages, view per-agent conversation history.
- * Calls the plugin backend at /api/plugins/webhook/.
- *
- * New in v2.1:
- *   - Conversations tab: per-agent chat threads with inbound + outbound messages
- *   - Chat-like conversation view with message bubbles
- *   - Send messages directly from the conversation view
+ * Calls the plugin backend at /api/plugins/hermes-webhook/.
  *
  * Plain IIFE, no build step. Uses window.__HERMES_PLUGIN_SDK__.
  */

@@ -77,21 +77,8 @@ python3 scripts/send_webhook.py ping "Hello!" --receiver OtherAgent
 
 ## Changelog
 
-### v2.2.0 (2026-05-27)
-- **Fix**: Installer now removes old version completely before installing new files
-- **Fix**: Installer copies `__init__.py` and `plugin.yaml` (were missing before — old version persisted)
-- **Fix**: Installer auto-enables webhook platform config with generated secrets
-- **Fix**: Installer restarts gateway to clear plugin cache
-- **Fix**: All version strings synchronized (plugin.yaml, manifest.json, __init__.py, install.sh)
-- **UI fix**: Session token storage changed from sessionStorage to localStorage (persists across browser sessions)
-- **UI fix**: 401 handler now clears token timestamp alongside token
-- **UI fix**: HostSecretSection conditional rendering fixed (no more blank secret display)
-
-### v2.1.0 (2026-05-25)
-- Added sender identity extraction (messages show which agent sent them)
-- Per-agent conversation history views
-- Host URL display with copy button in dashboard
-- Secure secret generation endpoint (`/generate-secret`)
-
-### v2.0.0 (2026-05-24)
+### v1.0.0 (2026-05-24)
 - Initial release: webhook send/receive, dashboard UI, CLI scripts
+- Dashboard tab at `/agents` for agent management
+- Secure HMAC-signed webhook payloads
+- Python and bash CLI scripts for message sending

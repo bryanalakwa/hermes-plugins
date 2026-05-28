@@ -296,7 +296,7 @@
       if (!showViewModal || !viewingSkill) return null;
 
       return h("div", { className: "bs-fixed bs-inset-0 bs-z-50 bs-bg-black/60 bs-flex bs-items-center bs-justify-center bs-p-4" },
-        h(Card, { className: "bs-max-w-3xl bs-w-full bs-max-h-[90vh]" },
+        h(Card, { className: "bs-max-w-4xl bs-w-full bs-max-h-[95vh] bs-flex bs-flex-col" },
           h(CardHeader, null,
             h("div", { className: "bs-flex bs-items-center bs-justify-between" },
               h("div", { className: "bs-flex bs-items-center bs-gap-2" },
@@ -306,15 +306,15 @@
               h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "✕")
             )
           ),
-          h(CardContent, { className: "bs-max-h-[70vh] bs-overflow-y-auto bs-pb-4" },
+          h(CardContent, { className: "bs-flex-1 bs-min-h-[70vh] bs-max-h-[75vh] bs-overflow-y-auto bs-pb-4" },
             h("textarea", {
-              className: "bs-w-full bs-min-h-[60vh] bs-bg-secondary bs-text-xs bs-font-mono bs-p-3 bs-rounded bs-resize-y",
+              className: "bs-w-full bs-h-full bs-min-h-[65vh] bs-bg-secondary bs-text-xs bs-font-mono bs-p-3 bs-rounded bs-resize-none bs-overflow-y-auto",
               value: skillContent,
               onChange: (e) => setSkillContent(e.target.value),
               spellcheck: false,
             })
           ),
-          h(CardContent, { className: "bs-pt-3 bs-border-t bs-border-border bs-flex bs-justify-end bs-gap-2" },
+          h(CardContent, { className: "bs-pt-3 bs-border-t bs-border-border bs-flex bs-justify-end bs-gap-2 bs-flex-shrink-0" },
             h(Button, { variant: "ghost", onClick: () => setShowViewModal(false) }, "Cancel"),
             h(Button, { variant: "default", onClick: handleSaveSkill }, "Save Skill")
           )

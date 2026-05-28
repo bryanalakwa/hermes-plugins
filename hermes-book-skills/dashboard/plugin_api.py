@@ -133,12 +133,14 @@ def _extract_key_concepts(text: str) -> dict:
     prompt = f"""Extract the most important concepts, methods, and techniques from this book text. Return ONLY valid JSON:
 
 {{
-  "concepts": ["concept 1", "concept 2", ... up to 10],
-  "methods": ["method 1", "method 2", ... up to 10],
-  "techniques": ["technique 1", "technique 2", ... up to 10]
+  "concepts": ["short descriptive phrase: 1-sentence actionable definition for other AIs"],
+  "methods": ["short descriptive phrase: 1-sentence actionable definition for other AIs"],
+  "techniques": ["short descriptive phrase: 1-sentence actionable definition for other AIs"]
 }}
 
-Focus on actionable frameworks, principles, and methods. Remove duplicates.
+IMPORTANT: Each concept/method/technique must be a SHORT descriptive phrase (5-8 words max) followed by a colon and a 1-sentence actionable definition that any AI can understand and apply. Example: "Grand Slam Offer: A compelling offer combining ultimate value, scarcity, and social proof to create irresistible urgency."
+
+Focus on actionable frameworks, principles, and methods. Remove duplicates. Limit to 10 items each.
 
 BOOK TEXT (first 10k chars):
 {text[:10000]}

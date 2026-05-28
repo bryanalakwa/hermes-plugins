@@ -1,10 +1,7 @@
 ---
 name: hermes-webhook
-description: >
-  Inter-agent webhook communication over Tailscale. Manage agent connections,
-  send messages (AI ping or direct notify), view message history.
-  Dashboard tab at /agents.
-version: 2.1.0
+description: "Inter-agent webhook communication over Tailscale. Manage agent connections, send messages (AI ping or direct notify), view message history. Dashboard tab at /agents."
+version: 1.0.0
 triggers:
   - webhook
   - inter-agent

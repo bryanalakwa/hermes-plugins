@@ -296,18 +296,22 @@
       if (!showViewModal || !viewingSkill) return null;
 
       return h("div", { className: "bs-fixed bs-inset-0 bs-z-50 bs-bg-black/60 bs-flex bs-items-center bs-justify-center bs-p-4" },
-        h(Card, { className: "bs-max-w-3xl bs-w-full bs-max-h-[85vh] bs-flex bs-flex-col" },
+        h(Card, { className: "bs-max-w-3xl bs-w-full bs-max-h-[90vh]" },
           h(CardHeader, null,
             h("div", { className: "bs-flex bs-items-center bs-justify-between" },
-              h("h3", { className: "bs-text-lg bs-font-semibold" }, "Edit: " + viewingSkill.replace(/-/g, " ")),
+              h("div", { className: "bs-flex bs-items-center bs-gap-2" },
+                h(BookIcon, { className: "bs-w-5 bs-h-5 bs-text-amber-400" }),
+                h(CardTitle, null, "Edit: " + viewingSkill.replace(/-/g, " "))
+              ),
               h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "✕")
             )
           ),
-          h(CardContent, { className: "bs-flex-1 bs-overflow-y-auto" },
+          h(CardContent, { className: "bs-max-h-[70vh] bs-overflow-y-auto bs-pb-4" },
             h("textarea", {
-              className: "bs-w-full bs-h-[60vh] bs-bg-secondary bs-text-xs bs-font-mono bs-p-3 bs-rounded bs-resize-none",
+              className: "bs-w-full bs-min-h-[60vh] bs-bg-secondary bs-text-xs bs-font-mono bs-p-3 bs-rounded bs-resize-y",
               value: skillContent,
               onChange: (e) => setSkillContent(e.target.value),
+              spellcheck: false,
             })
           ),
           h(CardContent, { className: "bs-pt-3 bs-border-t bs-border-border bs-flex bs-justify-end bs-gap-2" },

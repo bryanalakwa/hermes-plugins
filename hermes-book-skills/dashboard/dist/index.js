@@ -60,6 +60,11 @@
     h("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 7.5-8.5z" })
   );
 
+  const EyeIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8 0 0 0 0 0-.7.3-1 3-1 1 0 0 0 .7.3 1 3 2.7A7.7 7.7 0 0 1 11.7 21 7.7 7.7 0 0 1 2 12c0-2.9 2.3-5 5-5s5 2.1 5 5a11 11 0 0 1-22 0c0-2.4 1.8-4.5 4.3-4.9-.2.7-.3 1.4-.3 2.1z" }),
+    h("circle", { cx: 12, cy: 12, r: 3 })
+  );
+
   const CheckIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
     h("path", { d: "M20 6L9 17l-5-5" })
   );
@@ -107,6 +112,9 @@
     const [progressStatus, setProgressStatus] = useState("");
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
+    const [showViewModal, setShowViewModal] = useState(false);
+    const [viewingSkill, setViewingSkill] = useState(null);
+    const [skillContent, setSkillContent] = useState("");
 
     const fetchBooks = useCallback(() => {
       api("/books")
@@ -208,6 +216,37 @@
       }
     };
 
+    const handleViewSkill = async (skillName) => {
+      setViewingSkill(skillName);
+      try {
+        const skill = skills.find(s => s.name === skillName);
+        if (skill && skill.has_skill_md) {
+          const content = await api("/skills/" + encodeURIComponent(skillName) + "/content");
+          setSkillContent(content.content || "No content");
+        } else {
+          setSkillContent("# " + skillName + "\n\nNo SKILL.md found.");
+        }
+        setShowViewModal(true);
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+
+    const handleSaveSkill = async () => {
+      if (!viewingSkill) return;
+      try {
+        await api("/skills/" + encodeURIComponent(viewingSkill) + "/content", {
+          method: "PUT",
+          body: JSON.stringify({ content: skillContent }),
+        });
+        setSuccess("Skill saved!");
+        setShowViewModal(false);
+        fetchSkills();
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+
     const handleDeleteSkill = async (skillName) => {
       if (!confirm("Delete this skill?")) return;
 
@@ -250,6 +289,32 @@
         ),
         progress > 0 && h(ProgressBar, { progress, status: progressStatus }),
         progressStatus && h("div", { className: "bs-text-xs bs-text-muted-foreground bs-mb-2" }, progressStatus)
+      );
+    };
+
+    const SkillViewModal = () => {
+      if (!showViewModal || !viewingSkill) return null;
+
+      return h("div", { className: "bs-fixed bs-inset-0 bs-z-50 bs-bg-black/60 bs-flex bs-items-center bs-justify-center bs-p-4" },
+        h(Card, { className: "bs-max-w-3xl bs-w-full bs-max-h-[85vh] bs-flex bs-flex-col" },
+          h(CardHeader, null,
+            h("div", { className: "bs-flex bs-items-center bs-justify-between" },
+              h("h3", { className: "bs-text-lg bs-font-semibold" }, "Edit: " + viewingSkill.replace(/-/g, " ")),
+              h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "✕")
+            )
+          ),
+          h(CardContent, { className: "bs-flex-1 bs-overflow-y-auto" },
+            h("textarea", {
+              className: "bs-w-full bs-h-[60vh] bs-bg-secondary bs-text-xs bs-font-mono bs-p-3 bs-rounded bs-resize-none",
+              value: skillContent,
+              onChange: (e) => setSkillContent(e.target.value),
+            })
+          ),
+          h(CardContent, { className: "bs-pt-3 bs-border-t bs-border-border bs-flex bs-justify-end bs-gap-2" },
+            h(Button, { variant: "ghost", onClick: () => setShowViewModal(false) }, "Cancel"),
+            h(Button, { variant: "default", onClick: handleSaveSkill }, "Save Skill")
+          )
+        )
       );
     };
 
@@ -319,6 +384,14 @@
                       h(Button, {
                         variant: "ghost",
                         size: "sm",
+                        onClick: () => handleViewSkill(skill.name),
+                        title: "View/Edit skill",
+                      },
+                        h(EyeIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-blue-400" })
+                      ),
+                      h(Button, {
+                        variant: "ghost",
+                        size: "sm",
                         onClick: () => handleRenameSkill(skill.name),
                         title: "Rename skill",
                       },
@@ -360,7 +433,9 @@
         }, "Skills (" + skills.length + ")")
       ),
 
-      activeTab === "books" ? renderBooksTab() : renderSkillsTab()
+      activeTab === "books" ? renderBooksTab() : renderSkillsTab(),
+
+      h(SkillViewModal)
     );
   }
 

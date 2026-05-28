@@ -487,6 +487,38 @@ async def rename_skill(skill_name: str, data: dict) -> dict:
     return {"ok": True, "old_name": skill_name, "new_name": new_name}
 
 
+@router.get("/skills/{skill_name}/content")
+async def get_skill_content(skill_name: str) -> dict:
+    """Get the SKILL.md content for editing."""
+    _ensure_paths()
+    
+    skill_file = SKILLS_PATH / skill_name / "SKILL.md"
+    if not skill_file.exists():
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
+    
+    return {
+        "ok": True,
+        "content": skill_file.read_text(),
+        "skill_name": skill_name,
+    }
+
+
+@router.put("/skills/{skill_name}/content")
+async def update_skill_content(skill_name: str, data: dict) -> dict:
+    """Update the SKILL.md content."""
+    _ensure_paths()
+    
+    skill_dir = SKILLS_PATH / skill_name
+    if not skill_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
+    
+    content = data.get("content", "")
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text(content)
+    
+    return {"ok": True, "updated": skill_name}
+
+
 @router.get("/status")
 async def get_status() -> dict:
     """Plugin status endpoint."""

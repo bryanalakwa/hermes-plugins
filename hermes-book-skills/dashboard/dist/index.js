@@ -318,9 +318,9 @@
               spellcheck: false,
             })
           ),
-          h("div", { className: "bs-flex bs-justify-center bs-gap-4 bs-px-6 bs-py-5 bs-border-t bs-border-border bs-flex-shrink-0 bs-bg-card/50 bs-backdrop-blur-sm" },
-            h(Button, { variant: "outline", size: "default", onClick: () => setShowViewModal(false), className: "bs-min-w-24" }, "Cancel"),
-            h(Button, { variant: "default", size: "default", onClick: handleSaveSkill, className: "bs-min-w-24 bs-bg-blue-600 bs-hover:bg-blue-500" }, "Save Changes")
+          h("div", { className: "bs-flex bs-justify-end bs-gap-3 bs-px-6 bs-py-4 bs-border-t bs-border-border bs-flex-shrink-0" },
+            h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "Cancel"),
+            h(Button, { variant: "default", size: "sm", onClick: handleSaveSkill }, "Save Changes")
           )
         )
       );

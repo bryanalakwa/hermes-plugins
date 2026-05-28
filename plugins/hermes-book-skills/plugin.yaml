@@ -1,0 +1,27 @@
+---
+name: hermes-book-skills
+version: 1.0.0
+description: >
+  Book-to-skill generation plugin. Upload PDF/EPUB/TXT books,
+  extract key concepts via LLM processing, and generate reusable
+  Hermes skills. Independent book/library and skills/library management.
+hooks:
+  - on_dashboard_init
+config:
+  library_path:
+    default: $HERMES_HOME/book-library
+    description: Directory for storing uploaded books
+  skills_path:
+    default: $HERMES_HOME/skills/book-skills
+    description: Directory for generated skills
+  max_chunk_tokens:
+    default: 4000
+    description: Max tokens per chunk for large book processing
+paths:
+  library: $HERMES_HOME/book-library
+  skills: $HERMES_HOME/skills/book-skills
+  processing_state: $HERMES_HOME/book-library/.processing_state.json
+dashboard:
+  tab: /books
+  position: after:agents
+  icon: Book

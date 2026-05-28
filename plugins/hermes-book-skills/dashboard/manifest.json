@@ -1,0 +1,14 @@
+{
+  "name": "hermes-book-skills",
+  "label": "BookSkills",
+  "description": "Upload books and generate reusable skills. Process PDF/EPUB/TXT files to extract key concepts and methods.",
+  "icon": "Book",
+  "version": "1.0.0",
+  "tab": {
+    "path": "/books",
+    "position": "after:agents"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

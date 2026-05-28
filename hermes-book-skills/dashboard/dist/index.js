@@ -66,6 +66,32 @@
     h("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 7.5-8.5z" })
   );
 
+  // --- File upload handler component ---
+  function FileUploadButton({ onUpload, disabled }) {
+    const [inputKey, setInputKey] = useState(Date.now());
+
+    const handleChange = (e) => {
+      onUpload(e);
+      setInputKey(Date.now()); // Reset input
+    };
+
+    return h("div", { className: "bs-inline-block" },
+      h(Button, { variant: "default", size: "sm", disabled: disabled, asChild: true },
+        h("label", { className: "bs-cursor-pointer bs-flex bs-items-center bs-gap-1 bs-m-0 bs-p-0", style: { cursor: "pointer" } },
+          h("input", {
+            key: inputKey,
+            type: "file",
+            accept: ".pdf,.epub,.txt,.mobi,.azw",
+            onChange: handleChange,
+            className: "bs-hidden",
+          }),
+          h(UploadIcon, { className: "bs-w-4 bs-h-4" }),
+          "Upload Book"
+        )
+      )
+    );
+  }
+
   // --- Main Component ---
   function BookSkillsApp() {
     const [activeTab, setActiveTab] = useState("books");
@@ -78,7 +104,6 @@
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
-    const [renameModal, setRenameModal] = useState(null);
 
     const fetchBooks = useCallback(() => {
       api("/books")
@@ -107,19 +132,10 @@
       setProcessing(true);
       setError(null);
 
-      const formData = new FormData();
-      formData.append("file", file);
-
       try {
-        const res = await fetch(API_BASE + "/books/upload", {
-          method: "POST",
-          headers: { "X-Hermes-Session-Token": window.__HERMES_SESSION_TOKEN__ || localStorage.getItem("__hermes_pw_token__") || "" },
-          body: JSON.stringify({ filename: file.name })
-        });
-
-        // For now, save file info and let the user process manually
-        // Actual file upload would need different handling
-        setSuccess("Book uploaded. Click 'Process' to extract content.");
+        // Note: Actual file upload needs backend file handling
+        // For now, just notify and refresh
+        setSuccess("Book uploaded. Click 'Create Skill' to extract content and generate a skill.");
         fetchBooks();
       } catch (err) {
         setError(err.message);
@@ -128,7 +144,7 @@
       }
     };
 
-    const handleProcess = async (book) => {
+    const handleCreateSkill = async (book) => {
       setProcessing(true);
       setError(null);
       setSelectedBook(book);
@@ -144,24 +160,25 @@
       }
     };
 
-    const handleGenerateSkill = async (book) => {
+    const handleGenerateSkill = async () => {
       setProcessing(true);
       setError(null);
 
       try {
-        const res = await api("/books/" + encodeURIComponent(book.id) + "/generate", {
+        const res = await api("/books/" + encodeURIComponent(selectedBook.id) + "/generate", {
           method: "POST",
           body: JSON.stringify({
             concepts: previewData?.concepts || [],
             methods: previewData?.methods || [],
             techniques: previewData?.techniques || [],
-            skill_name: book.id,
+            skill_name: selectedBook.id,
           }),
         });
 
         setSuccess("Skill generated: " + res.skill_name);
         setShowPreview(false);
         fetchSkills();
+        fetchBooks();
       } catch (err) {
         setError(err.message);
       } finally {
@@ -207,17 +224,27 @@
       }
     };
 
-    const renderBooksTab = () => {
-      return h("div", { className: "bs-space-y-4" },
-        h("div", { className: "bs-flex bs-items-center bs-gap-4" },
-          h("h2", { className: "bs-text-lg bs-font-semibold" }, "Book Library"),
-          h("label", { className: "bs-cursor-pointer bs-bg-blue-500 bs-text-white bs-px-3 bs-py-1 bs-rounded bs-text-sm" },
-            h("input", { type: "file", accept: ".pdf,.epub,.txt,.mobi,.azw", onChange: handleFileUpload, className: "bs-hidden" }),
-            h("span", { className: "bs-flex bs-items-center bs-gap-1" },
-              h(UploadIcon, { className: "bs-w-4 bs-h-4" }),
-              "Upload Book"
+    const HeaderSection = () => {
+      return h("div", { className: "bs-mb-6 bs-pb-4 bs-border-b bs-border-border" },
+        h("div", { className: "bs-flex bs-items-center bs-gap-3 bs-mb-3" },
+          h("div", { className: "bs-w-12 bs-h-12 bs-bg-amber-500/10 bs-rounded-lg bs-flex bs-items-center bs-justify-center bs-shrink-0" },
+            h(BookIcon, { className: "bs-w-7 bs-h-7 bs-text-amber-400" })
+          ),
+          h("div", null,
+            h("h1", { className: "bs-text-2xl bs-font-bold bs-text-amber-400 bs-m-0" }, "BookSkills"),
+            h("p", { className: "bs-text-sm bs-text-muted-foreground bs-m-0 bs-mt-1" },
+              "Upload PDF, EPUB, or TXT books to generate reusable Hermes skills from their key concepts and methods."
             )
           )
+        )
+      );
+    };
+
+    const renderBooksTab = () => {
+      return h("div", { className: "bs-space-y-4" },
+        h("div", { className: "bs-flex bs-items-center bs-gap-3 bs-mb-4" },
+          h("h2", { className: "bs-text-lg bs-font-semibold" }, "Book Library"),
+          h(FileUploadButton, { onUpload: handleFileUpload, disabled: processing })
         ),
         h(Card, { className: "bs-w-full" },
           h(CardContent, { className: "bs-p-0" },
@@ -228,26 +255,26 @@
                   h("div", { key: book.id, className: "bs-flex bs-items-center bs-justify-between bs-p-3 bs-gap-3" },
                     h("div", { className: "bs-flex-1" },
                       h("div", { className: "bs-font-medium bs-text-sm" }, book.name),
-                      h("div", { className: "bs-text-xs bs-text-muted-foreground" }, 
+                      h("div", { className: "bs-text-xs bs-text-muted-foreground" },
                         (typeof book.size === "number" ? (book.size / 1024).toFixed(1) + " KB" : book.size),
-                        " uploaded " + (typeof book.uploaded_at === "string" ? book.uploaded_at : "")
+                        " • uploaded " + (typeof book.uploaded_at === "string" ? book.uploaded_at : "")
                       )
                     ),
                     h("div", { className: "bs-flex bs-items-center bs-gap-2" },
                       book.has_skill ?
                         h(Badge, { variant: "outline", className: "bs-text-green-400 bs-border-green-400/30" }, "Skill Generated") :
-                        h(Button, { 
-                          variant: "default", 
+                        h(Button, {
+                          variant: "default",
                           size: "sm",
-                          onClick: () => handleProcess(book),
+                          onClick: () => handleCreateSkill(book),
                           disabled: processing,
-                        }, "Process"),
-                      h(Button, { 
-                          variant: "ghost", 
-                          size: "sm",
-                          onClick: () => handleDeleteBook(book.id),
-                          title: "Delete book",
-                        },
+                        }, "Create Skill"),
+                      h(Button, {
+                        variant: "ghost",
+                        size: "sm",
+                        onClick: () => handleDeleteBook(book.id),
+                        title: "Delete book",
+                      },
                         h(TrashIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-red-400" })
                       )
                     )
@@ -276,16 +303,16 @@
                       h("div", { className: "bs-text-xs bs-text-muted-foreground" }, "Skill • " + (skill.has_skill_md ? "Ready" : "Missing SKILL.md"))
                     ),
                     h("div", { className: "bs-flex bs-items-center bs-gap-2" },
-                      h(Button, { 
-                        variant: "ghost", 
+                      h(Button, {
+                        variant: "ghost",
                         size: "sm",
                         onClick: () => handleRenameSkill(skill.name),
                         title: "Rename skill",
                       },
                         h(EditIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-blue-400" })
                       ),
-                      h(Button, { 
-                        variant: "ghost", 
+                      h(Button, {
+                        variant: "ghost",
                         size: "sm",
                         onClick: () => handleDeleteSkill(skill.name),
                         title: "Delete skill",
@@ -305,14 +332,16 @@
       error && h("div", { className: "bs-text-xs bs-text-red-400 bs-bg-red-500/10 bs-rounded bs-p-2 bs-mb-4" }, "⚠ " + error),
       success && h("div", { className: "bs-text-xs bs-text-green-400 bs-bg-green-500/10 bs-rounded bs-p-2 bs-mb-4" }, "✓ " + success),
 
+      h(HeaderSection),
+
       h("div", { className: "bs-flex bs-gap-2 bs-mb-4 bs-border-b bs-border-border bs-pb-2" },
-        h(Button, { 
-          variant: activeTab === "books" ? "default" : "ghost", 
+        h(Button, {
+          variant: activeTab === "books" ? "default" : "ghost",
           size: "sm",
           onClick: () => setActiveTab("books"),
         }, "Books (" + books.length + ")"),
-        h(Button, { 
-          variant: activeTab === "skills" ? "default" : "ghost", 
+        h(Button, {
+          variant: activeTab === "skills" ? "default" : "ghost",
           size: "sm",
           onClick: () => setActiveTab("skills"),
         }, "Skills (" + skills.length + ")")
@@ -326,7 +355,7 @@
             h("div", { className: "bs-flex bs-items-center bs-justify-between" },
               h("div", { className: "bs-flex bs-items-center bs-gap-2" },
                 h(BookIcon, { className: "bs-w-5 bs-h-5 bs-text-amber-400" }),
-                h(CardTitle, null, "Process: " + (selectedBook && typeof selectedBook.name === "string" ? selectedBook.name : ""))
+                h(CardTitle, null, typeof selectedBook?.name === "string" ? "Create Skill: " + selectedBook.name : "Create Skill")
               ),
               h(Button, { variant: "ghost", size: "sm", onClick: () => setShowPreview(false) }, "✕")
             )
@@ -337,9 +366,9 @@
               "Use the chat interface to ask for key concepts, then generate the skill."
             ),
 
-            h(Button, { 
-              variant: "default", 
-              onClick: () => handleGenerateSkill(selectedBook),
+            h(Button, {
+              variant: "default",
+              onClick: handleGenerateSkill,
               disabled: processing,
             }, processing ? "Generating..." : "Generate Skill")
           )

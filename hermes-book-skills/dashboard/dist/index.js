@@ -216,7 +216,12 @@
       }
     };
 
-    const handleViewSkill = async (skillName) => {
+const handleViewSkill = async (skillName) => {
+      // Toggle: close modal if already viewing this skill
+      if (showViewModal && viewingSkill === skillName) {
+        setShowViewModal(false);
+        return;
+      }
       setViewingSkill(skillName);
       try {
         const skill = skills.find(s => s.name === skillName);
@@ -296,26 +301,25 @@
       if (!showViewModal || !viewingSkill) return null;
 
       return h("div", { className: "bs-fixed bs-inset-0 bs-z-50 bs-bg-black/80 bs-flex bs-items-center bs-justify-center bs-p-4" },
-        h("div", { className: "bs-bg-card bs-rounded-lg bs-border bs-border-border bs-w-full bs-max-w-4xl bs-max-h-[90vh] bs-flex bs-flex-col", style: { maxHeight: "90vh" } },
-          h("div", { className: "bs-flex bs-items-center bs-justify-between bs-p-4 bs-border-b bs-border-border bs-flex-shrink-0" },
+        h("div", { className: "bs-bg-card bs-rounded-lg bs-border bs-border-border bs-w-full bs-max-w-4xl bs-flex bs-flex-col", style: { height: "85vh", maxHeight: "85vh" } },
+          h("div", { className: "bs-flex bs-items-center bs-justify-between bs-px-6 bs-py-4 bs-border-b bs-border-border bs-flex-shrink-0" },
             h("div", { className: "bs-flex bs-items-center bs-gap-2" },
               h(BookIcon, { className: "bs-w-5 bs-h-5 bs-text-amber-400" }),
-              h("h2", { className: "bs-text-lg bs-font-bold bs-m-0" }, "Edit: " + viewingSkill.replace(/-/g, " "))
+              h("h2", { className: "bs-text-lg bs-font-bold bs-m-0" }, viewingSkill.replace(/-/g, " "))
             ),
             h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "✕")
           ),
-          h("div", { className: "bs-p-4 bs-flex-1 bs-overflow-y-auto", style: { minHeight: "60vh", maxHeight: "calc(90vh - 120px)" } },
+          h("div", { className: "bs-px-6 bs-py-4 bs-flex-1 bs-overflow-hidden", style: { height: "calc(85vh - 120px)" } },
             h("textarea", {
-              className: "bs-w-full bs-bg-secondary bs-text-xs bs-font-mono bs-p-3 bs-rounded bs-resize-y bs-overflow-y-auto",
-              style: { minHeight: "56vh", height: "56vh" },
+              className: "bs-w-full bs-h-full bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-p-4",
               value: skillContent,
               onChange: (e) => setSkillContent(e.target.value),
               spellcheck: false,
             })
           ),
-          h("div", { className: "bs-flex bs-justify-end bs-gap-2 bs-p-4 bs-border-t bs-border-border bs-flex-shrink-0" },
+          h("div", { className: "bs-flex bs-justify-end bs-gap-3 bs-px-6 bs-py-4 bs-border-t bs-border-border bs-flex-shrink-0 bs-bg-card" },
             h(Button, { variant: "ghost", onClick: () => setShowViewModal(false) }, "Cancel"),
-            h(Button, { variant: "default", onClick: handleSaveSkill }, "Save Skill")
+            h(Button, { variant: "default", onClick: handleSaveSkill }, "Save")
           )
         )
       );

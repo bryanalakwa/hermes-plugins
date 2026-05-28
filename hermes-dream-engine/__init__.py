@@ -50,9 +50,9 @@ def register(ctx) -> None:
 
     # Import here to avoid import-time side effects
     try:
-    from .daemon import DreamDaemon
-except ImportError:
-    from daemon import DreamDaemon
+        from .daemon import DreamDaemon
+    except ImportError:
+        from daemon import DreamDaemon
 
     # Create and start daemon
     _daemon = DreamDaemon(

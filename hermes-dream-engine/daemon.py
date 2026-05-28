@@ -262,32 +262,28 @@ class DreamDaemon:
     def _send_via_gateway(self, message: str) -> None:
         """Send a message through the Hermes gateway to the user's Telegram.
 
-        Uses the gateway's REST API at localhost:9119. Falls back to
-        writing to the escalation file if the gateway is unreachable.
+        Uses the webhook platform to send via Telegram directly. Falls back to
+        writing to escalation file if webhook is unavailable.
         """
-        import urllib.request
-        import urllib.error
+        import subprocess
 
-        # Try the gateway's agent-invoke endpoint first
+        # Try sending via the webhook sender script (inter-agent-webhook)
         try:
-            payload = json.dumps({
-                "message": message,
-                "session_id": "dream-escalation",
-                "deliver": "telegram",
-            }).encode()
-            req = urllib.request.Request(
-                "http://127.0.0.1:9119/api/chat",
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            # Use a short timeout — don't block the daemon
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                if resp.status in (200, 201, 202):
-                    logger.info("escalation sent via gateway")
+            sender_script = Path.home() / ".hermes" / "skills" / "inter-agent-webhook" / "scripts" / "send_webhook.py"
+            if sender_script.exists():
+                result = subprocess.run(
+                    ["python3", str(sender_script), "notify", message, "--sender", "DreamEngine"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    logger.info("escalation sent via webhook sender")
                     return
+                else:
+                    logger.debug("webhook sender failed: %s", result.stderr)
         except Exception as e:
-            logger.debug("gateway send failed: %s", e)
+            logger.debug("webhook send failed: %s", e)
 
         # Fallback: write to escalation inbox file
         try:

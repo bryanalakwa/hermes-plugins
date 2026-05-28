@@ -296,7 +296,7 @@
       if (!showViewModal || !viewingSkill) return null;
 
       return h("div", { className: "bs-fixed bs-inset-0 bs-z-50 bs-bg-black/80 bs-flex bs-items-center bs-justify-center bs-p-4" },
-        h("div", { className: "bs-bg-card bs-rounded-lg bs-border bs-border-border bs-w-full bs-max-w-4xl bs-max-h-[90vh] bs-flex bs-flex-col" },
+        h("div", { className: "bs-bg-card bs-rounded-lg bs-border bs-border-border bs-w-full bs-max-w-4xl bs-max-h-[90vh] bs-flex bs-flex-col", style: { maxHeight: "90vh" } },
           h("div", { className: "bs-flex bs-items-center bs-justify-between bs-p-4 bs-border-b bs-border-border bs-flex-shrink-0" },
             h("div", { className: "bs-flex bs-items-center bs-gap-2" },
               h(BookIcon, { className: "bs-w-5 bs-h-5 bs-text-amber-400" }),
@@ -304,9 +304,10 @@
             ),
             h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "✕")
           ),
-          h("div", { className: "bs-p-4 bs-flex-1 bs-overflow-y-auto bs-min-h-[70vh]" },
+          h("div", { className: "bs-p-4 bs-flex-1 bs-overflow-y-auto", style: { minHeight: "60vh", maxHeight: "calc(90vh - 120px)" } },
             h("textarea", {
-              className: "bs-w-full bs-min-h-[65vh] bs-bg-secondary bs-text-xs bs-font-mono bs-p-3 bs-rounded bs-resize-y bs-overflow-y-auto",
+              className: "bs-w-full bs-bg-secondary bs-text-xs bs-font-mono bs-p-3 bs-rounded bs-resize-y bs-overflow-y-auto",
+              style: { minHeight: "56vh", height: "56vh" },
               value: skillContent,
               onChange: (e) => setSkillContent(e.target.value),
               spellcheck: false,

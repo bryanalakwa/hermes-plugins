@@ -12,7 +12,7 @@
 
   const React = SDK.React;
   const h = React.createElement;
-  const { useState, useEffect, useCallback } = SDK.hooks;
+  const { useState, useEffect, useCallback, useRef, useLayoutEffect } = SDK.hooks;
   const { Card, CardContent, Badge, Button, Input, Label } = SDK.components;
 
   const API_BASE = "/api/plugins/hermes-book-skills";
@@ -98,6 +98,8 @@
     const [editingSkill, setEditingSkill] = useState(null);
     const [skillContent, setSkillContent] = useState("");
     const [modalLoaded, setModalLoaded] = useState(true);
+    const textareaRef = useRef(null);
+    const cursorPosRef = useRef({ start: 0, end: 0 });
 
     const fetchBooks = useCallback(() => {
       api("/books")
@@ -118,6 +120,13 @@
         setInitialLoad(false);
       }
     }, [initialLoad, fetchBooks, fetchSkills]);
+
+    // Restore cursor position after render when editing
+    useLayoutEffect(() => {
+      if (textareaRef.current && cursorPosRef.current.start !== cursorPosRef.current.end) {
+        textareaRef.current.setSelectionRange(cursorPosRef.current.start, cursorPosRef.current.end);
+      }
+    });
 
     const handleFileUpload = async (e) => {
       const file = e.target.files[0];
@@ -210,7 +219,7 @@
           const content = await api("/skills/" + encodeURIComponent(skillName) + "/content");
           setSkillContent(content.content || "");
         } else {
-          setSkillContent("# " + skillName + "\n\nNo SKILL.md found.");
+          setSkillContent("# " + skillName + "\\n\\nNo SKILL.md found.");
         }
         setModalLoaded(true);
         setShowViewModal(true);
@@ -287,9 +296,17 @@
               !modalLoaded
                 ? h("div", { className: "bs-flex bs-items-center bs-justify-center bs-h-full bs-text-muted-foreground" }, "Loading...")
                 : h("textarea", {
-                    className: "bs-w-full bs-flex-1 bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-p-4 bs-box-border bs-border bs-border-border",
+                    ref: textareaRef,
+                    autoFocus: true,
+                    className: "bs-w-full bs-flex-1 bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-box-border bs-border bs-border-border",
                     value: skillContent,
-                    onChange: (e) => setSkillContent(e.target.value),
+                    onChange: (e) => {
+                      setSkillContent(e.target.value);
+                      // Save cursor position before state update
+                      if (e.target.selectionStart !== e.target.selectionEnd) {
+                        cursorPosRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
+                      }
+                    },
                     spellcheck: false
                   })
             ),

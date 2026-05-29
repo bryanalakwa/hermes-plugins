@@ -131,6 +131,13 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Firefox: ensure flex child can shrink */
+.bs-dream-modal-inner > .bs-dream-modal-body {
+  flex-basis: 0;
 }
 
 .bs-dream-modal-body::-webkit-scrollbar {
@@ -166,8 +173,8 @@
   color: #e5e7eb;
   line-height: 1.6;
   width: 100%;
-  flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   resize: none;
   overflow-y: auto;
   padding: 1rem;
@@ -175,10 +182,5 @@
   border: 1px solid #334155;
   font-size: 0.75rem;
   font-family: monospace;
-}
-
-/* Ensure textarea is properly contained */
-.bs-dream-modal-body {
-  display: flex;
-  flex-direction: column;
+  box-sizing: border-box;
 }

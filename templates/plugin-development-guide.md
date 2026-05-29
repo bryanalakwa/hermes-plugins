@@ -80,3 +80,45 @@ done
 - [ ] Install script preserves existing user data files
 - [ ] Install script idempotent (safe to re-run)
 - [ ] Install script handles fresh install vs upgrade gracefully
+
+## Dashboard Password Gate
+
+The dashboard password gate (`bcrypt` + `/dashboard-auth` endpoint) protects the web UI. Install scripts should handle this on first install:
+
+### Pattern (from template)
+
+```bash
+# bcrypt for dashboard password gate (common dependency)
+if ! "$VENV_PYTHON" -c "import bcrypt" 2>/dev/null; then
+  info "Installing bcrypt for password gate..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet bcrypt
+  ok "bcrypt installed"
+fi
+
+# Dashboard password gate setup (optional - ask on first install)
+DASHBOARD_AUTH="$HERMES_HOME/dashboard.auth"
+if [ ! -f "$DASHBOARD_AUTH" ]; then
+  echo ""
+  echo "The dashboard password gate protects your agent's web UI."
+  read -rsp "Set a dashboard password (press Enter to skip): " PASSWORD
+  echo ""
+  if [ -n "$PASSWORD" ]; then
+    HASH=$("$VENV_PYTHON" -c "
+import bcrypt
+password = '''$PASSWORD'''
+hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+print(hash)
+")
+    echo "$HASH" > "$DASHBOARD_AUTH"
+    ok "Dashboard password set"
+  else
+    ok "No password set - dashboard accessible without authentication"
+  fi
+fi
+```
+
+This pattern:
+- Installs `bcrypt` automatically if missing
+- Prompts only on first install (skips if `dashboard.auth` exists)
+- Allows user to skip by pressing Enter
+- Uses the venv python to avoid environment issues

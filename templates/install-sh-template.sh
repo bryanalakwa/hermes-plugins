@@ -122,14 +122,43 @@ ok "Plugin files copied"
 
 # ── Step 4: Install dependencies ───────────────────────────
 info "Step 4/5: Installing dependencies..."
-# Example: PyYAML for config parsing
+
+# PyYAML for config parsing (common dependency)
 "$VENV_PYTHON" -c "import yaml" 2>/dev/null && {
   ok "PyYAML already installed"
 } || {
   info "Installing PyYAML..."
-  "$HERMES_AGENT/venv/bin/pip" install pyyaml 2>&1 | tail -3
+  "$HERMES_AGENT/venv/bin/pip" install --quiet pyyaml
   ok "PyYAML installed"
 }
+
+# bcrypt for dashboard password gate (common dependency)
+if ! "$VENV_PYTHON" -c "import bcrypt" 2>/dev/null; then
+  info "Installing bcrypt for password gate..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet bcrypt
+  ok "bcrypt installed"
+fi
+
+# Dashboard password gate setup (optional - ask on first install)
+DASHBOARD_AUTH="$HERMES_HOME/dashboard.auth"
+if [ ! -f "$DASHBOARD_AUTH" ]; then
+  echo ""
+  echo "The dashboard password gate protects your agent's web UI."
+  read -rsp "Set a dashboard password (press Enter to skip): " PASSWORD
+  echo ""
+  if [ -n "$PASSWORD" ]; then
+    HASH=$("$VENV_PYTHON" -c "
+import bcrypt
+password = '''$PASSWORD'''
+hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+print(hash)
+")
+    echo "$HASH" > "$DASHBOARD_AUTH"
+    ok "Dashboard password set"
+  else
+    ok "No password set - dashboard accessible without authentication"
+  fi
+fi
 
 # ── Step 5: Restore user data ───────────────────────────────
 info "Step 5/5: Restoring preserved user data..."

@@ -6,8 +6,9 @@
 # This script:
 #   1. Runs memory setup (holographic fact store + directories)
 #   2. Copies plugin files to ~/.hermes/plugins/
-#   3. Installs Python dependencies
-#   4. Verifies installation
+#   3. Installs Python dependencies (bcrypt, PyYAML)
+#   4. Sets up dashboard password gate (optional)
+#   5. Verifies installation
 #
 # Usage:
 #   chmod +x install.sh
@@ -146,10 +147,48 @@ echo ""
   ok "PyYAML installed"
 }
 
+# Install bcrypt for dashboard password gate
+if ! "$VENV_PYTHON" -c "import bcrypt" 2>/dev/null; then
+  info "Installing bcrypt for password gate..."
+  "$VENV_PIP" install --quiet bcrypt
+  ok "bcrypt installed"
+fi
+
 # ══════════════════════════════════════════════════════════
-# PHASE 4: Configuration
+# PHASE 4: Dashboard Password Gate
+# ══════════════════════════════════════════════════════════
 echo ""
-echo -e "${BOLD}━━ Phase 4: Configuration ━━${NC}"
+echo -e "${BOLD}━━ Phase 4: Dashboard Password Gate ━━${NC}"
+echo ""
+
+DASHBOARD_AUTH="$HERMES_HOME/dashboard.auth"
+
+if [ ! -f "$DASHBOARD_AUTH" ]; then
+  echo ""
+  echo "The dashboard password gate protects your agent's web UI."
+  read -rsp "Set a dashboard password (press Enter to skip): " PASSWORD
+  echo ""
+  if [ -n "$PASSWORD" ]; then
+    HASH=$("$VENV_PYTHON" -c "
+import bcrypt
+password = '''$PASSWORD'''
+hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+print(hash)
+")
+    echo "$HASH" > "$DASHBOARD_AUTH"
+    ok "Dashboard password set"
+  else
+    ok "No password set - dashboard accessible without authentication"
+  fi
+else
+  ok "Dashboard password already configured"
+fi
+
+# ══════════════════════════════════════════════════════════
+# PHASE 5: Configuration
+# ══════════════════════════════════════════════════════════
+echo ""
+echo -e "${BOLD}━━ Phase 5: Configuration ━━${NC}"
 echo ""
 
 if [ -f "$CONFIG" ]; then

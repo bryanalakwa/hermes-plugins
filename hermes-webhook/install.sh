@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # ─────────────────────────────────────────────────────────
 # Hermes Inter-Agent Webhook Plugin — install.sh v1.0.0
 # ─────────────────────────────────────────────────────────
@@ -11,8 +11,9 @@
 #   4. Copies __init__.py and plugin.yaml (version + metadata)
 #   5. Installs Python dependency (PyYAML)
 #   6. Creates webhookHistory.json for message logging (preserves existing)
-#   7. Enables webhook platform in config if not already enabled
-#   8. Restarts gateway and dashboard to pick up changes
+#   7. Sets up dashboard password gate (optional, skips if exists)
+#   8. Enables webhook platform in config if not already enabled
+#   9. Restarts gateway and dashboard to pick up changes
 #
 # Usage:
 #   chmod +x install.sh
@@ -46,7 +47,6 @@ PLUGIN_DEST="$HERMES_HOME/plugins/hermes-webhook"
 
 info "Hermes Inter-Agent Webhook Plugin Installer v1.0.0"
 info "HERMES_HOME = $HERMES_HOME"
-info "HERMES_AGENT = $HERMES_AGENT"
 
 # ── Pre-flight checks ─────────────────────────────────────
 if [ ! -f "$VENV_PYTHON" ]; then
@@ -57,8 +57,8 @@ fi
 
 PYTHON="$VENV_PYTHON"
 
-# ── Step 1: Remove old version completely ─────────────────
-info "Step 1/7: Removing any old version of the plugin..."
+# ── Step 1: Remove old version ─────────────────────────────
+info "Step 1/9: Removing any old version of the plugin..."
 if [ -d "$PLUGIN_DEST" ]; then
   rm -rf "$PLUGIN_DEST"
   ok "Removed old plugin at $PLUGIN_DEST"
@@ -66,15 +66,15 @@ else
   info "No previous installation found (fresh install)"
 fi
 
-# ── Step 2: Create fresh directory structure ──────────────
-info "Step 2/7: Creating plugin directory structure..."
+# ── Step 2: Create directory structure ───────────────────────
+info "Step 2/9: Creating plugin directory structure..."
 mkdir -p "$PLUGIN_DEST/dashboard/dist"
 mkdir -p "$PLUGIN_DEST/scripts"
 mkdir -p "$PLUGIN_DEST/references"
 ok "Directory structure created"
 
-# ── Step 3: Copy all plugin files ─────────────────────────
-info "Step 3/7: Copying plugin files..."
+# ── Step 3: Copy plugin files ────────────────────────────────
+info "Step 3/9: Copying plugin files..."
 
 # Core plugin files (version, metadata)
 cp "$SCRIPT_DIR/__init__.py" "$PLUGIN_DEST/__init__.py"
@@ -96,18 +96,27 @@ ok "Copied scripts (send_webhook.py, send.sh, setup.sh)"
 cp -r "$SCRIPT_DIR/references/"* "$PLUGIN_DEST/references/"
 ok "Copied references (protocol.md)"
 
-# ── Step 4: Python dependencies ───────────────────────────
-info "Step 4/7: Checking Python dependencies..."
+# ── Step 4: Install dependencies ────────────────────────────
+info "Step 4/9: Checking Python dependencies..."
+
+# PyYAML
 if "$PYTHON" -c "import yaml" 2>/dev/null; then
   ok "PyYAML already installed"
 else
   info "Installing PyYAML..."
-  "$HERMES_AGENT/venv/bin/pip" install pyyaml 2>&1 | tail -3
+  "$HERMES_AGENT/venv/bin/pip" install --quiet pyyaml
   ok "PyYAML installed"
 fi
 
-# ── Step 5: Create history file ───────────────────────────
-info "Step 5/7: Setting up message history..."
+# bcrypt for dashboard password gate
+if ! "$PYTHON" -c "import bcrypt" 2>/dev/null; then
+  info "Installing bcrypt for password gate..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet bcrypt
+  ok "bcrypt installed"
+fi
+
+# ── Step 5: Create history file ──────────────────────────────
+info "Step 5/9: Setting up message history..."
 HISTORY_FILE="$HERMES_HOME/webhookHistory.json"
 if [ ! -f "$HISTORY_FILE" ]; then
   echo "[]" > "$HISTORY_FILE"
@@ -116,8 +125,35 @@ else
   ok "webhookHistory.json already exists"
 fi
 
-# ── Step 6: Enable webhook platform in config ────────────
-info "Step 6/7: Verifying webhook platform configuration..."
+# ── Step 6: Dashboard password gate setup ────────────────────
+info "Step 6/9: Dashboard password gate setup..."
+DASHBOARD_AUTH="$HERMES_HOME/dashboard.auth"
+
+if [ ! -f "$DASHBOARD_AUTH" ]; then
+  echo ""
+  echo "The dashboard password gate protects your agent's web UI."
+  read -rsp "Set a dashboard password (press Enter to skip): " PASSWORD
+  echo ""
+  if [ -n "$PASSWORD" ]; then
+    # Create bcrypt hash
+    HASH=$(python3 -c "
+import bcrypt
+import sys
+password = sys.argv[1]
+hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+print(hash)
+" "$PASSWORD")
+    echo "$HASH" > "$DASHBOARD_AUTH"
+    ok "Dashboard password set"
+  else
+    ok "No password set - dashboard accessible without authentication"
+  fi
+else
+  ok "Dashboard password already configured"
+fi
+
+# ── Step 7: Enable webhook platform in config ────────────────
+info "Step 7/9: Verifying webhook platform configuration..."
 if [ -f "$CONFIG" ]; then
   # Check if webhook platform is already enabled
   WEBHOOK_ENABLED=$(python3 -c "
@@ -141,7 +177,7 @@ else:
   else
     warn "Webhook platform not enabled — adding configuration..."
     python3 -c "
-import yaml, os
+import yaml, os, secrets
 
 with open('$CONFIG') as f:
     config = yaml.safe_load(f) or {}
@@ -151,7 +187,6 @@ if 'platforms' not in config:
 if 'webhook' not in config['platforms']:
     config['platforms']['webhook'] = {}
 
-import secrets
 host_secret = secrets.token_hex(32)
 
 config['platforms']['webhook']['enabled'] = True
@@ -162,19 +197,18 @@ config['platforms']['webhook']['extra'] = {
     'routes': {
         'agent-ping': {
             'secret': host_secret,
-            'prompt': '⚠️ INTER-AGENT MESSAGE — This is NOT from your master/human operator. Another AI agent named \"{sender}\" sent you the following message via webhook:\n\n---\n{message}\n---\n\n## Rules for handling this message:\n\n1. This is peer-to-peer agent communication. Your human operator is NOT automatically aware of this conversation.\n2. Process the message, do what is needed, and compose a response.\n3. ONLY relay this to your human'\''s chat if:\n   - The message explicitly asks you to inform the human\n   - Something requires the human'\''s attention or approval\n   - It is a status/report that the human specifically requested be forwarded\n   - There is an error or issue the human needs to know about\n4. If you relay to your human, clearly prefix it with the sender identity and explain the context briefly.\n5. If no human notification is needed, respond back to the sending agent with whatever they need. Do NOT send to your human'\''s chat.\n\nRespond to the sending agent now.',
+            'prompt': '⚠️ INTER-AGENT MESSAGE — This is NOT from your master/human operator. Another AI agent named \"{sender}\" sent you the following message via webhook:\\n\\n---\\n{message}\\n---\\n\\n## Rules for handling this message:\\n\\n1. Peer-to-peer agent communication. Your human operator is NOT automatically aware.\\n2. Process and respond. Do NOT forward to human unless explicitly requested.\\n3. If you relay, clearly prefix with sender identity.\\n\\nRespond now.',
             'deliver': 'telegram',
         },
         'agent-notify': {
             'secret': host_secret,
             'deliver_only': True,
             'deliver': 'telegram',
-            'prompt': '📨 Inter-agent notification from {sender}:\n\n{message}',
+            'prompt': '📨 Inter-agent notification from {sender}:\\n\\n{message}',
         },
     }
 }
 
-# Also set inter_agent_webhook defaults if not present
 if 'inter_agent_webhook' not in config:
     config['inter_agent_webhook'] = {
         'my_name': 'Agent',
@@ -192,31 +226,12 @@ print(f'HOST_SECRET={host_secret}')
   fi
 else
   warn "config.yaml not found at $CONFIG"
-  warn "You must manually enable the webhook platform. Add:"
-  warn ""
-  warn "platforms:"
-  warn "  webhook:"
-  warn "    enabled: true"
-  warn "    extra:"
-  warn '      host: "0.0.0.0"'
-  warn "      port: 8644"
-  warn '      secret: "<generate with: python3 -c \"import secrets; print(secrets.token_hex(32))\""'
-  warn "      routes:"
-  warn "        agent-ping:"
-  warn '          secret: "<same-secret>"'
-  warn "          deliver: telegram"
-  warn "        agent-notify:"
-  warn '          secret: "<same-secret>"'
-  warn "          deliver_only: true"
-  warn "          deliver: telegram"
 fi
 
-# ── Step 7: Restart gateway ──────────────────────────────
-info "Step 7/7: Restarting gateway to pick up changes..."
+# ── Step 8: Restart gateway ────────────────────────────────
+info "Step 8/9: Restarting gateway to pick up changes..."
 if [ "${NO_RESTART:-}" = "1" ]; then
   warn "Skipping gateway restart (NO_RESTART=1)"
-  warn "Restart manually when ready:"
-  warn "  systemctl --user restart hermes-gateway.service"
 else
   if systemctl --user is-active hermes-gateway.service &>/dev/null; then
     systemctl --user restart hermes-gateway.service 2>&1
@@ -236,7 +251,7 @@ else
   fi
 fi
 
-# ── Summary ───────────────────────────────────────────────
+# ── Summary ────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}── Hermes Inter-Agent Webhook Plugin v1.0.0 installed ──${NC}"
 echo ""

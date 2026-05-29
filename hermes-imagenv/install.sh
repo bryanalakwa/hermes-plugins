@@ -2,16 +2,8 @@
 # ─────────────────────────────────────────────────────────
 # Hermes ImaGen Plugin — install.sh v1.0.0
 # ─────────────────────────────────────────────────────────
-# Installs image generation plugin with LCM model.
-#
-# Usage:
-#   chmod +x install.sh
-#   ./install.sh
-#
-# Environment variables:
-#   HERMES_HOME    — defaults to ~/.hermes
-#   NO_RESTART     — set to skip gateway restart
-#   NO_MODEL_DL    — set to skip model download (for offline installs)
+# Installs image generation wrapper. Uses existing ComfyUI
+# installation or diffusers directly.
 # ─────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -29,51 +21,43 @@ err()   { echo -e "${RED}[imagenv]${NC} ✗ $*"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
-HERMES_AGENT="${HERMES_AGENT_DIR:-$HOME/.hermes/hermes-agent}"
 PLUGIN_DEST="$HERMES_HOME/plugins/hermes-imagenv"
 
 info "Hermes ImaGen Plugin Installer v1.0.0"
 info "HERMES_HOME = $HERMES_HOME"
 
 # ── Step 1: Remove old version ───────────────────────────
-info "Step 1/5: Removing any old version..."
+info "Step 1/4: Removing any old version..."
 if [ -d "$PLUGIN_DEST" ]; then
   rm -rf "$PLUGIN_DEST"
   ok "Removed old plugin"
 fi
 
-# ── Step 2: Create directory structure ─────────────────────
-info "Step 2/5: Creating directories..."
-mkdir -p "$PLUGIN_DEST/dashboard"
+# ── Step 2: Create directories ───────────────────────────
+info "Step 2/4: Creating directories..."
 mkdir -p "$PLUGIN_DEST/scripts"
-ok "Created structure"
+mkdir -p "$PLUGIN_DEST/dashboard"
+mkdir -p "$HERMES_HOME/imagenv-output"
+ok "Directories created"
 
 # ── Step 3: Copy plugin files ─────────────────────────────
-info "Step 3/5: Copying plugin files..."
+info "Step 3/4: Copying plugin files..."
 cp "$SCRIPT_DIR/__init__.py" "$PLUGIN_DEST/__init__.py"
 cp "$SCRIPT_DIR/plugin.yaml" "$PLUGIN_DEST/plugin.yaml"
-cp "$SCRIPT_DIR/gradio_app.py" "$PLUGIN_DEST/gradio_app.py"
-cp -r "$SCRIPT_DIR/src/"* "$PLUGIN_DEST/src/" 2>/dev/null || true
-ok "Copied plugin files"
+cp "$SCRIPT_DIR/README.md" "$PLUGIN_DEST/README.md"
+ok "Files copied"
 
-# ── Step 4: Install dependencies ───────────────────────────
-info "Step 4/5: Checking Python dependencies..."
-"$HERMES_AGENT/venv/bin/pip" install -q diffusers Pillow numpy gradio 2>/dev/null || {
-  warn "Some dependencies may already be installed"
+# ── Step 4: Verify dependencies ─────────────────────────
+info "Step 4/4: Verifying dependencies..."
+python3 -c "import diffusers, PIL, numpy" 2>/dev/null && ok "Dependencies ready" || {
+  warn "Install dependencies: pip3 install diffusers Pillow numpy gradio"
 }
-ok "Dependencies ready"
-
-# ── Step 5: Create output directory ───────────────────────
-info "Step 5/5: Setting up output directory..."
-mkdir -p "$HERMES_HOME/imagenv-output"
-ok "Output directory ready"
 
 echo ""
 echo -e "${GREEN}── Hermes ImaGen Plugin v1.0.0 installed ──${NC}"
 echo ""
-echo "  Start:  python3 $PLUGIN_DEST/gradio_app.py"
-echo "  Or:     python3 ~/.hermes/scripts/run_imagenv.py"
+echo "  Generate: python3 ~/.hermes/scripts/generate_image.py \"prompt\""
+echo "  Or use:   python3 ~/.hermes/scripts/imagenv.py \"prompt\""
 echo ""
-echo "  For Tailscale Funnel access, run:"
-echo "    tailscale funnel --hostname=YOUR_HOSTNAME serve / http://localhost:7860"
+echo "  Output: ~/.hermes/imagenv-output/"
 echo ""

@@ -1,5 +1,5 @@
 /**
- * BookSkills Dashboard Plugin v1.0
+ * BookSkills Dashboard Plugin v1.2
  *
  * Upload books, generate skills, manage libraries.
  * Calls backend at /api/plugins/hermes-book-skills/
@@ -12,8 +12,8 @@
 
   const React = SDK.React;
   const h = React.createElement;
-  const { useState, useEffect, useCallback, useRef } = SDK.hooks;
-  const { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Label } = SDK.components;
+  const { useState, useEffect, useCallback } = SDK.hooks;
+  const { Card, CardContent, Badge, Button, Input, Label } = SDK.components;
 
   const API_BASE = "/api/plugins/hermes-book-skills";
 
@@ -60,36 +60,17 @@
     h("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 7.5-8.5z" })
   );
 
-  const EyeIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
-    h("path", { d: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8 0 0 0 0 0-.7.3-1 3-1 1 0 0 0 .7.3 1 3 2.7A7.7 7.7 0 0 1 11.7 21 7.7 7.7 0 0 1 2 12c0-2.9 2.3-5 5-5s5 2.1 5 5a11 11 0 0 1-22 0c0-2.4 1.8-4.5 4.3-4.9-.2.7-.3 1.4-.3 2.1z" }),
-    h("circle", { cx: 12, cy: 12, r: 3 })
-  );
-
   const CheckIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
     h("path", { d: "M20 6L9 17l-5-5" })
   );
 
-  // --- File upload handler component ---
-  function FileUploadButton({ onUpload, disabled }) {
-    const [inputKey, setInputKey] = useState(Date.now());
+  const ChevronIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "m6 9 6 6 6-6" })
+  );
 
-    const handleChange = async (e) => {
-      await onUpload(e);
-      setInputKey(Date.now());
-    };
-
-    return h("label", { className: "bs-cursor-pointer bs-inline-flex bs-items-center bs-gap-1 bs-px-3 bs-py-1 bs-rounded bs-text-sm bs-font-medium bs-border bs-border-border", style: { cursor: "pointer" } },
-      h("input", {
-        key: inputKey,
-        type: "file",
-        accept: ".pdf,.epub,.txt,.mobi,.azw",
-        onChange: handleChange,
-        className: "bs-hidden",
-      }),
-      h(UploadIcon, { className: "bs-w-4 bs-h-4" }),
-      "Upload Book"
-    );
-  }
+  const XIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "M18 6 6 18" }), h("path", { d: "m6 6 12 12" })
+  );
 
   // --- Progress Bar Component ---
   function ProgressBar({ progress, status }) {
@@ -114,7 +95,9 @@
     const [success, setSuccess] = useState(null);
     const [showViewModal, setShowViewModal] = useState(false);
     const [viewingSkill, setViewingSkill] = useState(null);
+    const [editingSkill, setEditingSkill] = useState(null);
     const [skillContent, setSkillContent] = useState("");
+    const [modalLoaded, setModalLoaded] = useState(true);
 
     const fetchBooks = useCallback(() => {
       api("/books")
@@ -158,6 +141,7 @@
 
         if (res.status === 401) {
           localStorage.removeItem("__hermes_pw_token__");
+          localStorage.removeItem("__hermes_pw_token_ts__");
           window.location.reload();
           return;
         }
@@ -217,20 +201,18 @@
     };
 
     const handleViewSkill = async (skillName) => {
-      // Toggle: close modal if already viewing this skill
-      if (showViewModal && viewingSkill === skillName) {
-        setShowViewModal(false);
-        return;
-      }
       setViewingSkill(skillName);
+      setEditingSkill(skillName);
+      setModalLoaded(false);
       try {
         const skill = skills.find(s => s.name === skillName);
         if (skill && skill.has_skill_md) {
           const content = await api("/skills/" + encodeURIComponent(skillName) + "/content");
-          setSkillContent(content.content || "No content");
+          setSkillContent(content.content || "");
         } else {
           setSkillContent("# " + skillName + "\n\nNo SKILL.md found.");
         }
+        setModalLoaded(true);
         setShowViewModal(true);
       } catch (err) {
         setError(err.message);
@@ -238,9 +220,9 @@
     };
 
     const handleSaveSkill = async () => {
-      if (!viewingSkill) return;
+      if (!editingSkill) return;
       try {
-        await api("/skills/" + encodeURIComponent(viewingSkill) + "/content", {
+        await api("/skills/" + encodeURIComponent(editingSkill) + "/content", {
           method: "PUT",
           body: JSON.stringify({ content: skillContent }),
         });
@@ -279,11 +261,160 @@
       }
     };
 
-    const HeaderSection = () => {
-      return h("div", { className: "bs-mb-6 bs-pb-4 bs-border-b bs-border-border" },
+    // --- Skill View Modal (styled like dream-modal) ---
+    const SkillViewModal = () => {
+      if (!showViewModal || !viewingSkill) return null;
+
+      return h("div", { className: "bs-fixed bs-inset-0 bs-z-50" },
+        // Backdrop
+        h("div", { className: "bs-dream-modal-backdrop", onClick: () => setShowViewModal(false) }),
+        // Modal panel
+        h("div", { className: "bs-dream-modal-panel" },
+          h("div", { className: "bs-dream-modal-inner", onClick: (e) => e.stopPropagation() },
+            // Header
+            h("div", { className: "bs-flex bs-items-center bs-justify-between bs-px-6 bs-py-4 bs-border-b bs-border-border bs-flex-shrink-0" },
+              h("div", { className: "bs-flex bs-items-center bs-gap-3" },
+                h("div", { className: "bs-p-2 bs-rounded-lg bs-bg-amber-500/10" },
+                  h(BookIcon, { className: "bs-w-5 bs-h-5 bs-text-amber-400" })
+                ),
+                h("div", null,
+                  h("h2", { className: "bs-text-base bs-font-semibold bs-text-gray-100" }, viewingSkill.replace(/-/g, " ")),
+                  h("p", { className: "bs-text-xs bs-text-muted-foreground bs-mt-0.5" }, "Skill • Click entry to view")
+                )
+              ),
+              h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "✕")
+            ),
+            // Scrollable body
+            h("div", { className: "bs-dream-modal-body" },
+              !modalLoaded
+                ? h("div", { className: "bs-flex bs-items-center bs-justify-center bs-h-full bs-text-muted-foreground" }, "Loading...")
+                : h("textarea", {
+                    className: "bs-w-full bs-h-full bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-p-4 bs-box-border bs-border bs-border-border focus:bs-outline-none focus:bs-ring-2 focus:bs-ring-amber-500",
+                    value: skillContent,
+                    onChange: (e) => setSkillContent(e.target.value),
+                    spellcheck: false,
+                    autoFocus: true,
+                    onFocus: (e) => e.target.select(),
+                  })
+            ),
+            // Footer
+            h("div", { className: "bs-flex bs-justify-end bs-gap-3 bs-px-6 bs-py-4 bs-border-t bs-border-border bs-flex-shrink-0 bs-bg-black/20" },
+              h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "Cancel"),
+              h(Button, { variant: "default", size: "sm", onClick: handleSaveSkill }, "Save Changes")
+            )
+          )
+        )
+      );
+    };
+
+    // --- Books Library (separate cards like dream journal) ---
+    const renderBooksTab = () => {
+      return h("div", { className: "bs-space-y-4" },
+        h("div", { className: "bs-flex bs-items-center bs-gap-4" },
+          h("h2", { className: "bs-text-lg bs-font-semibold" }, "Book Library"),
+          h("label", { className: "bs-cursor-pointer bs-inline-flex bs-items-center bs-gap-1 bs-px-3 bs-py-1 bs-rounded bs-text-sm bs-font-medium bs-border bs-border-border", style: { cursor: "pointer" } },
+            h("input", {
+              type: "file",
+              accept: ".pdf,.epub,.txt,.mobi,.azw",
+              onChange: handleFileUpload,
+              className: "bs-hidden",
+            }),
+            h(UploadIcon, { className: "bs-w-4 bs-h-4" }),
+            "Upload Book"
+          )
+        ),
+        books.length === 0
+          ? h("div", { className: "bs-text-center bs-py-12 bs-text-muted-foreground" }, "No books uploaded yet.")
+          : h("div", { className: "bs-space-y-3" },
+              books.map((book) =>
+                h(Card, { key: book.id, className: "bs-w-full bs-cursor-pointer bs-group bs-hover:bs-border-border/80 bs-transition-all" },
+                  h(CardContent, { className: "bs-p-4", onClick: () => { if (book.has_skill) handleViewSkill(book.skill_name); } },
+                    h("div", { className: "bs-flex bs-items-center bs-justify-between bs-gap-3" },
+                      h("div", { className: "bs-flex-1" },
+                        h("div", { className: "bs-font-medium bs-text-sm bs-group-hover:bs-text-amber-300 bs-transition-colors" }, book.name),
+                        h("div", { className: "bs-text-xs bs-text-muted-foreground bs-mt-1" },
+                          (typeof book.size === "number" ? (book.size / 1024).toFixed(1) + " KB" : book.size),
+                          " • uploaded " + (typeof book.uploaded_at === "string" ? book.uploaded_at : "")
+                        )
+                      ),
+                      h("div", { className: "bs-flex bs-items-center bs-gap-2" },
+                        book.has_skill
+                          ? h(Badge, { variant: "outline", className: "bs-text-green-400 bs-border-green-400/30" }, "Skill Generated")
+                          : h(Button, {
+                              variant: "default",
+                              size: "sm",
+                              onClick: (e) => { e.stopPropagation(); handleCreateSkill(book); },
+                              disabled: processing,
+                            }, "Create Skill"),
+                        h(Button, {
+                          variant: "ghost",
+                          size: "sm",
+                          onClick: (e) => { e.stopPropagation(); handleDeleteBook(book.id); },
+                          title: "Delete book",
+                        },
+                          h(TrashIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-red-400" })
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+      );
+    };
+
+    // --- Skills Library (separate cards like dream journal) ---
+    const renderSkillsTab = () => {
+      return h("div", { className: "bs-space-y-4" },
+        h("div", { className: "bs-flex bs-items-center bs-gap-4" },
+          h("h2", { className: "bs-text-lg bs-font-semibold" }, "Skills Library")
+        ),
+        skills.length === 0
+          ? h("div", { className: "bs-text-center bs-py-12 bs-text-muted-foreground" }, "No skills generated yet.")
+          : h("div", { className: "bs-space-y-3" },
+              skills.map((skill) =>
+                h(Card, { key: skill.name, className: "bs-w-full bs-cursor-pointer bs-group bs-hover:bs-border-border/80 bs-transition-all" },
+                  h(CardContent, { className: "bs-p-4" },
+                    h("div", { className: "bs-flex bs-items-center bs-justify-between bs-gap-3" },
+                      h("div", { className: "bs-flex-1", onClick: () => handleViewSkill(skill.name) },
+                        h("div", { className: "bs-font-medium bs-text-sm bs-capitalize bs-group-hover:bs-text-amber-300 bs-transition-colors" }, skill.name.replace(/-/g, " ")),
+                        h("div", { className: "bs-text-xs bs-text-muted-foreground bs-mt-1" }, skill.has_skill_md ? "Skill • Ready" : "Missing SKILL.md")
+                      ),
+                      h("div", { className: "bs-flex bs-items-center bs-gap-2" },
+                        h(Button, {
+                          variant: "ghost",
+                          size: "sm",
+                          onClick: () => handleRenameSkill(skill.name),
+                          title: "Rename skill",
+                        },
+                          h(EditIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-blue-400" })
+                        ),
+                        h(Button, {
+                          variant: "ghost",
+                          size: "sm",
+                          onClick: () => handleDeleteSkill(skill.name),
+                          title: "Delete skill",
+                        },
+                          h(TrashIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-red-400" })
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+      );
+    };
+
+    return h("div", { className: "bs-max-w-4xl bs-mx-auto" },
+      error && h("div", { className: "bs-text-xs bs-text-red-400 bs-bg-red-500/10 bs-rounded bs-p-2 bs-mb-4" }, "⚠ " + error),
+      success && h("div", { className: "bs-text-xs bs-text-green-400 bs-bg-green-500/10 bs-rounded bs-p-2 bs-mb-4" }, h(CheckIcon, { className: "bs-inline bs-w-3 bs-h-3 bs-mr-1" }), success),
+
+      // Header
+      h("div", { className: "bs-mb-6 bs-pb-4 bs-border-b bs-border-border" },
         h("div", { className: "bs-flex bs-items-center bs-gap-3 bs-mb-3" },
-          h("div", { className: "bs-w-12 bs-h-12 bs-rounded-lg bs-flex bs-items-center bs-justify-center bs-shrink-0" },
-            h(BookIcon, { className: "bs-w-7 bs-h-7 bs-text-white" })
+          h("div", { className: "bs-w-12 bs-h-12 bs-rounded-lg bs-flex bs-items-center bs-justify-center bs-shrink-0 bs-bg-amber-500/10" },
+            h(BookIcon, { className: "bs-w-7 bs-h-7 bs-text-amber-400" })
           ),
           h("div", null,
             h("h1", { className: "bs-text-2xl bs-font-bold bs-text-white bs-m-0" }, "BookSkills"),
@@ -294,139 +425,9 @@
         ),
         progress > 0 && h(ProgressBar, { progress, status: progressStatus }),
         progressStatus && h("div", { className: "bs-text-xs bs-text-muted-foreground bs-mb-2" }, progressStatus)
-      );
-    };
+      ),
 
-    const SkillViewModal = () => {
-      if (!showViewModal || !viewingSkill) return null;
-
-      return h("div", { className: "bs-fixed bs-inset-0 bs-z-50 bs-bg-black/80 bs-flex bs-items-center bs-justify-center bs-p-4" },
-        h("div", { className: "bs-bg-card bs-rounded-lg bs-border bs-border-border bs-w-full bs-max-w-4xl bs-flex bs-flex-col", style: { height: "90vh", maxHeight: "90vh" } },
-          h("div", { className: "bs-flex bs-items-center bs-justify-between bs-px-6 bs-py-4 bs-border-b bs-border-border bs-flex-shrink-0" },
-            h("div", { className: "bs-flex bs-items-center bs-gap-2" },
-              h(BookIcon, { className: "bs-w-5 bs-h-5 bs-text-amber-400" }),
-              h("h2", { className: "bs-text-lg bs-font-bold bs-m-0" }, viewingSkill.replace(/-/g, " "))
-            ),
-            h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "✕")
-          ),
-          h("div", { className: "bs-px-6 bs-py-4 bs-flex-1 bs-overflow-hidden" },
-            h("textarea", {
-              className: "bs-w-full bs-h-full bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-p-4 bs-box-border",
-              value: skillContent,
-              onChange: (e) => setSkillContent(e.target.value),
-              spellcheck: false,
-            })
-          ),
-          h("div", { className: "bs-flex bs-justify-end bs-gap-3 bs-px-6 bs-py-4 bs-border-t bs-border-border bs-flex-shrink-0" },
-            h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "Cancel"),
-            h(Button, { variant: "default", size: "sm", onClick: handleSaveSkill }, "Save Changes")
-          )
-        )
-      );
-    };
-
-    const renderBooksTab = () => {
-      return h("div", { className: "bs-space-y-4" },
-        h("div", { className: "bs-flex bs-items-center bs-gap-3 bs-mb-4" },
-          h("h2", { className: "bs-text-lg bs-font-semibold" }, "Book Library"),
-          h(FileUploadButton, { onUpload: handleFileUpload, disabled: processing })
-        ),
-        h(Card, { className: "bs-w-full" },
-          h(CardContent, { className: "bs-p-0" },
-            books.length === 0 ?
-              h("div", { className: "bs-p-6 bs-text-center bs-text-muted-foreground" }, "No books uploaded yet.") :
-              h("div", { className: "bs-divide-y" },
-                books.map((book) =>
-                  h("div", { key: book.id, className: "bs-flex bs-items-center bs-justify-between bs-p-3 bs-gap-3" },
-                    h("div", { className: "bs-flex-1" },
-                      h("div", { className: "bs-font-medium bs-text-sm" }, book.name),
-                      h("div", { className: "bs-text-xs bs-text-muted-foreground" },
-                        (typeof book.size === "number" ? (book.size / 1024).toFixed(1) + " KB" : book.size),
-                        " • uploaded " + (typeof book.uploaded_at === "string" ? book.uploaded_at : "")
-                      )
-                    ),
-                    h("div", { className: "bs-flex bs-items-center bs-gap-2" },
-                      book.has_skill ?
-                        h(Badge, { variant: "outline", className: "bs-text-green-400 bs-border-green-400/30" }, "Skill Generated") :
-                        h(Button, {
-                          variant: "default",
-                          size: "sm",
-                          onClick: () => handleCreateSkill(book),
-                          disabled: processing,
-                        }, "Create Skill"),
-                      h(Button, {
-                        variant: "ghost",
-                        size: "sm",
-                        onClick: () => handleDeleteBook(book.id),
-                        title: "Delete book",
-                      },
-                        h(TrashIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-red-400" })
-                      )
-                    )
-                  )
-                )
-              )
-          )
-        )
-      );
-    };
-
-    const renderSkillsTab = () => {
-      return h("div", { className: "bs-space-y-4" },
-        h("div", { className: "bs-flex bs-items-center bs-gap-4" },
-          h("h2", { className: "bs-text-lg bs-font-semibold" }, "Skills Library"),
-        ),
-        h(Card, { className: "bs-w-full" },
-          h(CardContent, { className: "bs-p-0" },
-            skills.length === 0 ?
-              h("div", { className: "bs-p-6 bs-text-center bs-text-muted-foreground" }, "No skills generated yet.") :
-              h("div", { className: "bs-divide-y" },
-                skills.map((skill) =>
-                  h("div", { key: skill.name, className: "bs-flex bs-items-center bs-justify-between bs-p-3 bs-gap-3" },
-                    h("div", { className: "bs-flex-1" },
-                      h("div", { className: "bs-font-medium bs-text-sm bs-capitalize" }, skill.name.replace(/-/g, " ")),
-                      h("div", { className: "bs-text-xs bs-text-muted-foreground" }, "Skill • " + (skill.has_skill_md ? "Ready" : "Missing SKILL.md"))
-                    ),
-                    h("div", { className: "bs-flex bs-items-center bs-gap-2" },
-                      h(Button, {
-                        variant: "ghost",
-                        size: "sm",
-                        onClick: () => handleViewSkill(skill.name),
-                        title: "View/Edit skill",
-                      },
-                        h(EyeIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-blue-400" })
-                      ),
-                      h(Button, {
-                        variant: "ghost",
-                        size: "sm",
-                        onClick: () => handleRenameSkill(skill.name),
-                        title: "Rename skill",
-                      },
-                        h(EditIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-blue-400" })
-                      ),
-                      h(Button, {
-                        variant: "ghost",
-                        size: "sm",
-                        onClick: () => handleDeleteSkill(skill.name),
-                        title: "Delete skill",
-                      },
-                        h(TrashIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-red-400" })
-                      )
-                    )
-                  )
-                )
-              )
-          )
-        )
-      );
-    };
-
-    return h("div", { className: "bs-max-w-4xl bs-mx-auto" },
-      error && h("div", { className: "bs-text-xs bs-text-red-400 bs-bg-red-500/10 bs-rounded bs-p-2 bs-mb-4" }, "⚠ " + error),
-      success && h("div", { className: "bs-text-xs bs-text-green-400 bs-bg-green-500/10 bs-rounded bs-p-2 bs-mb-4" }, h(CheckIcon, { className: "bs-inline bs-w-3 bs-h-3 bs-mr-1" }), success),
-
-      h(HeaderSection),
-
+      // Tabs
       h("div", { className: "bs-flex bs-gap-2 bs-mb-4 bs-border-b bs-border-border bs-pb-2" },
         h(Button, {
           variant: activeTab === "books" ? "default" : "ghost",
@@ -440,8 +441,10 @@
         }, "Skills (" + skills.length + ")")
       ),
 
+      // Content
       activeTab === "books" ? renderBooksTab() : renderSkillsTab(),
 
+      // Modal
       h(SkillViewModal)
     );
   }

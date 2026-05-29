@@ -108,11 +108,16 @@ mkdir -p "$PLUGIN_DEST/references"
 info "Copying plugin files..."
 
 # Root-level Python files
-for f in __init__.py daemon.py plugin_api.py plugin.yaml plugin_api.py; do
+for f in __init__.py daemon.py plugin.yaml; do
   if [ -f "$SCRIPT_DIR/$f" ]; then
     cp "$SCRIPT_DIR/$f" "$PLUGIN_DEST/$f"
   fi
 done
+
+# Dashboard API handler
+if [ -f "$SCRIPT_DIR/plugin_api.py" ]; then
+  cp "$SCRIPT_DIR/plugin_api.py" "$PLUGIN_DEST/plugin_api.py"
+fi
 
 # Dashboard files
 if [ -d "$SCRIPT_DIR/dashboard" ]; then

@@ -147,6 +147,57 @@ def resolve_escalation(action_id: str, resolution: str) -> bool:
         return False
 
 
+def resolve_escalation_item(
+    session_id: str,
+    item_index: int,
+    resolution: str,  # "ignore", or custom guidance text
+) -> bool:
+    """Resolve a single item within an escalation.
+
+    Args:
+        session_id: Full session ID (used to find action_id)
+        item_index: 1-based index of the specific item
+        resolution: "ignore" or guidance text for this item
+
+    Returns True if found and updated.
+    """
+    path = get_escalation_path()
+    if not path.exists():
+        return False
+
+    action_id = session_id[:8]
+
+    try:
+        inbox = json.loads(path.read_text())
+        for entry in inbox:
+            if entry.get("action_id") == action_id:
+                # Track per-item resolutions
+                if "item_resolutions" not in entry:
+                    entry["item_resolutions"] = {}
+
+                items = entry.get("items", [])
+                if 1 <= item_index <= len(items):
+                    entry["item_resolutions"][str(item_index)] = resolution
+
+                    # Remove delivered items (they're done)
+                    remaining = [
+                        i for i, item in enumerate(items, 1)
+                        if str(i) not in entry.get("item_resolutions", {})
+                    ]
+
+                    # If all items resolved, mark as fully delivered
+                    if not remaining:
+                        entry["delivered"] = True
+                        entry["resolution"] = "all_items_resolved"
+
+                path.write_text(json.dumps(inbox, indent=2, ensure_ascii=False))
+                return True
+        return False
+    except Exception as exc:
+        logger.debug("Failed to resolve escalation item %s[%d]: %s", action_id, item_index, exc)
+        return False
+
+
 # ============================================================================
 # Message formatting
 # ============================================================================

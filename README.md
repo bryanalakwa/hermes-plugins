@@ -61,6 +61,29 @@ Requires a Tailscale Funnel URL and shared secret. See the plugin's `README.md` 
 - Python 3.11+ with venv
 - Linux or WSL
 
+## Plugin Development
+
+Plugins follow a standardized installer pattern. See `templates/install-sh-template.sh` for the reference install script.
+
+### Key Rules
+
+1. **User data separation**: All user data MUST be stored in `$HERMES_HOME/<plugin-name>/` — NEVER in the plugin code directory (`$HERMES_AGENT/plugins/<plugin-name>/`). The installer will completely replace plugin code during upgrades.
+
+2. **Safe upgrades**: Install scripts use `rm -rf "$PLUGIN_DEST"` to remove old code, then copy fresh. Your user data must survive this. See `templates/plugin-development-guide.md` for details.
+
+3. **Idempotent installers**: Running install twice should be safe and produce the same result. Check for existing files before creating.
+
+### Structure
+
+```
+hermes-plugins/
+├── templates/
+│   ├── install-sh-template.sh      # Reference installer script
+│   └── plugin-development-guide.md   # User data preservation rules
+├── hermes-dream-engine/            # Example plugin (user data in ~/.hermes/dream_engine/)
+├── hermes-webhook/               # Example plugin (user data in ~/.hermes/webhookHistory.json)
+```
+
 ## Contributing
 
 Found a bug? Have an idea? Open an issue or a pull request.

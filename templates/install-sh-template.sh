@@ -99,6 +99,12 @@ done
 
 # Dashboard files (manifest + API backend + JS)
 if [ -d "$SCRIPT_DIR/dashboard" ]; then
+  # Validate plugin_api.py syntax before copying (prevents runtime crashes)
+  if [ -f "$SCRIPT_DIR/dashboard/plugin_api.py" ]; then
+    if ! python3 -m py_compile "$SCRIPT_DIR/dashboard/plugin_api.py" 2>/dev/null; then
+      warn "plugin_api.py has syntax errors - copying anyway but plugin may fail to load"
+    fi
+  fi
   cp -r "$SCRIPT_DIR/dashboard/"* "$PLUGIN_DEST/dashboard/" 2>/dev/null || true
 fi
 

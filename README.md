@@ -4,10 +4,11 @@ Plugins for [Hermes Agent](https://github.com/NousResearch/hermes-agent) that ad
 
 ## Plugins
 
-| Plugin | What it does |
-|---|---|
-| [hermes-dream-engine](hermes-dream-engine/) | 🌙 Autonomous dreaming — idle-time memory consolidation, problem re-evaluation, and creative invention. Event-driven state machine (Active→Idle→Dormant→Hypnagogic→Dreaming). LLM-driven dream phases. Telegram escalation for high-priority items. Blog-style journal in dashboard. |
-| [hermes-webhook](hermes-webhook/) | 🤖 Inter-agent messaging — send/receive messages between Hermes agents over Tailscale. HMAC-SHA256 signed. Per-agent conversation view in dashboard. Sender-aware routing. |
+- **hermes-dream-engine** — 🌙 Autonomous dreaming. Idle-time memory consolidation, problem re-evaluation, and creative invention. Event-driven state machine (Active→Idle→Dormant→Hypnagogic→Dreaming). LLM-driven dream phases, Telegram escalation for high-priority items, blog-style journal in dashboard.
+
+- **hermes-webhook** — 🤖 Inter-agent messaging. Send/receive messages between Hermes agents over Tailscale. HMAC-SHA256 signed, per-agent conversation view in dashboard, sender-aware routing.
+
+- **hermes-book-skills** — 📚 Book upload to skill generation. PDF/EPUB/TXT support, LLM extraction of concepts & methods into reusable Hermes skills, library tabs for books and skills.
 
 ## Installing a Plugin
 
@@ -15,7 +16,7 @@ Each plugin is self-contained with its own installer. General pattern:
 
 ```bash
 # 1. Go to the plugin directory
-cd hermes-dream-engine/    # or hermes-webhook/
+cd hermes-dream-engine/    # or hermes-webhook/ or hermes-book-skills/
 
 # 2. Run the installer
 chmod +x install.sh
@@ -54,6 +55,16 @@ systemctl --user restart hermes-gateway.service
 ```
 
 Requires a Tailscale Funnel URL and shared secret. See the plugin's `README.md` for configuration details.
+
+### hermes-book-skills
+
+```bash
+cd hermes-book-skills/
+./install.sh
+systemctl --user restart hermes-gateway.service
+```
+
+Upload books via the Books tab, then create skills from extracted concepts and methods.
 
 ## Requirements
 

@@ -43,7 +43,7 @@ HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 HERMES_AGENT="${HERMES_AGENT_DIR:-$HOME/.hermes/hermes-agent}"
 VENV_PYTHON="$HERMES_AGENT/venv/bin/python"
 PLUGIN_NAME="your-plugin-name"  # ← CHANGE THIS
-PLUGIN_DEST="$HERMES_AGENT/plugins/$PLUGIN_NAME"
+PLUGIN_DEST="$HERMES_HOME/plugins/$PLUGIN_NAME"
 
 # ── Pre-flight checks ─────────────────────────────────────
 if [ ! -f "$VENV_PYTHON" ]; then

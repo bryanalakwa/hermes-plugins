@@ -9,7 +9,7 @@ The single most important rule for Hermes plugins: **Never store user data insid
 ```
 User data (PERSISTENT)     Plugin code (REPLACEABLE)
 ====================     =========================
-$HERMES_HOME/             $HERMES_AGENT/plugins/<name>/
+$HERMES_HOME/             $HERMES_HOME/plugins/<name>/
 ├── config.yaml           ├── __init__.py
 ├── <plugin-name>/        ├── plugin.yaml
 │   ├── state.json        ├── daemon.py
@@ -31,8 +31,7 @@ $HERMES_HOME/             $HERMES_AGENT/plugins/<name>/
 | Settings | `$HERMES_HOME/config.yaml` | ✅ Yes |
 | Dreams archive | `$HERMES_HOME/dream_engine/archive/` | ✅ Yes |
 | Facts DB | `$HERMES_HOME/memory_store.db` | ✅ Yes |
-| Plugin code | `$HERMES_AGENT/plugins/<plugin>/` | ❌ Replaced |
-| Dashboard JS | `$PLUGIN_DEST/dashboard/dist/index.js` | ❌ Replaced |
+| Plugin code | `$HERMES_HOME/plugins/<plugin>/` | ❌ Replaced |
 
 ### Install Script Pattern
 
@@ -66,18 +65,18 @@ done
 
 **hermes-dream-engine:**
 - User data: `$HERMES_HOME/dream_engine/*` and `$HERMES_HOME/*memory*`
-- Plugin code: `$HERMES_AGENT/plugins/hermes-dream-engine/`
+- Plugin code: `$HERMES_HOME/plugins/hermes-dream-engine/`
 - Separation: ✅ Clean — `install.sh` creates `$HERMES_HOME/dream_engine/` but never removes it
 
 **hermes-webhook:**
 - User data: `$HERMES_HOME/webhookHistory.json`
-- Plugin code: `$HERMES_AGENT/plugins/hermes-webhook/`
+- Plugin code: `$HERMES_HOME/plugins/hermes-webhook/`
 - Separation: ✅ Clean — `install.sh` creates history if missing, never deletes existing
 
 ### Checklist for New Plugins
 
 - [ ] All user data stored in `$HERMES_HOME/<plugin-name>/`
-- [ ] Plugin code only in `$HERMES_AGENT/plugins/<plugin-name>/`
+- [ ] Plugin code only in `$HERMES_HOME/plugins/<plugin-name>/`
 - [ ] Install script preserves existing user data files
 - [ ] Install script idempotent (safe to re-run)
 - [ ] Install script handles fresh install vs upgrade gracefully

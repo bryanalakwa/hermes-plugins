@@ -5,11 +5,12 @@
 # Installs / upgrades the BookSkills plugin for any Hermes agent.
 #
 # What it does:
-#   1. Copies plugin files to hermes-agent/plugins/hermes-book-skills/
+#   1. Copies plugin files to ~/.hermes/plugins/hermes-book-skills/
 #   2. Copies dashboard plugin (JS/CSS/manifest/plugin_api)
 #   3. Installs Python dependencies (PyPDF2, EbookLib, beautifulsoup4)
 #   4. Creates book-library directory
-#   5. Restarts gateway to pick up changes
+#   5. Creates skills/book-skills directory
+#   6. Restarts gateway to pick up changes
 #
 # Usage:
 #   chmod +x install.sh
@@ -38,7 +39,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 HERMES_AGENT="${HERMES_AGENT_DIR:-$HOME/.hermes/hermes-agent}"
 VENV_PYTHON="$HERMES_AGENT/venv/bin/python"
-PLUGIN_DEST="$HERMES_AGENT/plugins/hermes-book-skills"
+PLUGIN_DEST="$HERMES_HOME/plugins/hermes-book-skills"
 
 info "Hermes BookSkills Plugin Installer v1.0.0"
 info "HERMES_HOME = $HERMES_HOME"

@@ -5,12 +5,12 @@
 # Installs / upgrades the webhook plugin for any Hermes agent.
 #
 # What it does:
-#   1. Copies plugin files to hermes-agent/plugins/hermes-webhook/
+#   1. Copies plugin files to ~/.hermes/plugins/hermes-webhook/
 #   2. Copies dashboard plugin (JS/CSS/manifest/plugin_api)
 #   3. Copies send scripts, setup script, and protocol reference
 #   4. Copies __init__.py and plugin.yaml (version + metadata)
 #   5. Installs Python dependency (PyYAML)
-#   6. Creates webhookHistory.json for message logging
+#   6. Creates webhookHistory.json for message logging (preserves existing)
 #   7. Enables webhook platform in config if not already enabled
 #   8. Restarts gateway and dashboard to pick up changes
 #
@@ -42,7 +42,7 @@ HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 HERMES_AGENT="${HERMES_AGENT_DIR:-$HOME/.hermes/hermes-agent}"
 VENV_PYTHON="$HERMES_AGENT/venv/bin/python"
 CONFIG="$HERMES_HOME/config.yaml"
-PLUGIN_DEST="$HERMES_AGENT/plugins/hermes-webhook"
+PLUGIN_DEST="$HERMES_HOME/plugins/hermes-webhook"
 
 info "Hermes Inter-Agent Webhook Plugin Installer v1.0.0"
 info "HERMES_HOME = $HERMES_HOME"

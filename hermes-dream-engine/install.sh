@@ -5,7 +5,7 @@
 # Installs the hermes-dream-engine plugin for Hermes Agent.
 # This script:
 #   1. Runs memory setup (holographic fact store + directories)
-#   2. Copies plugin files to hermes-agent/plugins/
+#   2. Copies plugin files to ~/.hermes/plugins/
 #   3. Installs Python dependencies
 #   4. Verifies installation
 #
@@ -98,7 +98,7 @@ echo ""
 echo -e "${BOLD}━━ Phase 2: Plugin Installation ━━${NC}"
 echo ""
 
-PLUGIN_DEST="$HERMES_AGENT/plugins/hermes-dream-engine"
+PLUGIN_DEST="$HERMES_HOME/plugins/hermes-dream-engine"
 
 # Create directory structure
 mkdir -p "$PLUGIN_DEST/dashboard/dist"
@@ -240,9 +240,7 @@ print('All imports OK')
 [ -f "$HERMES_HOME/memories/USER.md" ] && ok "USER.md exists" || { warn "USER.md missing"; ERRORS=$((ERRORS+1)); }
 [ -d "$HERMES_HOME/dream_engine" ] && ok "Dream engine data directory exists" || { warn "Dream engine directory missing"; ERRORS=$((ERRORS+1)); }
 
-# ══════════════════════════════════════════════════════════
-# SUMMARY
-# ══════════════════════════════════════════════════════════
+# ── Summary ───────────────────────────────────────────────
 echo ""
 if [ $ERRORS -eq 0 ]; then
   echo -e "${GREEN}${BOLD}── Dream Engine v1.0.0 installed successfully ──${NC}"

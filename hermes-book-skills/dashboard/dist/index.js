@@ -1,0 +1,467 @@
+/**
+ * BookSkills Dashboard Plugin v1.0
+ *
+ * Upload books, generate skills, manage libraries.
+ * Calls backend at /api/plugins/hermes-book-skills/
+ */
+(function () {
+  "use strict";
+
+  const SDK = window.__HERMES_PLUGIN_SDK__;
+  if (!SDK || !window.__HERMES_PLUGINS__) return;
+
+  const React = SDK.React;
+  const h = React.createElement;
+  const { useState, useEffect, useCallback, useRef, useLayoutEffect } = SDK.hooks;
+  const { Card, CardContent, Badge, Button, Input, Label } = SDK.components;
+
+  const API_BASE = "/api/plugins/hermes-book-skills";
+
+  async function api(path, opts) {
+    const token = window.__HERMES_SESSION_TOKEN__ || localStorage.getItem("__hermes_pw_token__") || "";
+    const headers = { "Content-Type": "application/json", ...(opts?.headers || {}) };
+    if (token) headers["X-Hermes-Session-Token"] = token;
+    const res = await fetch(API_BASE + path, { ...opts, headers });
+    if (res.status === 401) {
+      localStorage.removeItem("__hermes_pw_token__");
+      localStorage.removeItem("__hermes_pw_token_ts__");
+      window.location.reload();
+      return;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(res.status + ": " + text);
+    }
+    return res.json();
+  }
+
+  // --- Icons ---
+  const BookIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 24, height: 24, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19" }),
+    h("path", { d: "M6.5 2v19" }),
+    h("path", { d: "M12 11h7" }),
+    h("path", { d: "M12 16h7" })
+  );
+
+  const UploadIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }),
+    h("polyline", { points: "17 8 12 3 7 8" }),
+    h("line", { x1: "12", y1: "3", x2: "12", y2: "15" })
+  );
+
+  const TrashIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "M3 6h18" }),
+    h("path", { d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" }),
+    h("path", { d: "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" })
+  );
+
+  const EditIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 1-2-2v-7" }),
+    h("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 7.5-8.5z" })
+  );
+
+  const CheckIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "M20 6L9 17l-5-5" })
+  );
+
+  const ChevronIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "m6 9 6 6 6-6" })
+  );
+
+  const XIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+    h("path", { d: "M18 6 6 18" }), h("path", { d: "m6 6 12 12" })
+  );
+
+  // --- Progress Bar Component ---
+  function ProgressBar({ progress, status }) {
+    return h("div", { className: "bs-w-full bs-bg-secondary bs-rounded-full bs-h-2 bs-overflow-hidden bs-mb-3" },
+      h("div", {
+        className: "bs-h-full bs-bg-blue-500 bs-transition-all bs-duration-300",
+        style: { width: progress + "%" }
+      })
+    );
+  }
+
+  // --- Main Component ---
+  function BookSkillsApp() {
+    const [activeTab, setActiveTab] = useState("books");
+    const [books, setBooks] = useState([]);
+    const [skills, setSkills] = useState([]);
+    const [initialLoad, setInitialLoad] = useState(true);
+    const [processing, setProcessing] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [progressStatus, setProgressStatus] = useState("");
+    const [error, setError] = useState(null);
+    const [success, setSuccess] = useState(null);
+    const [showViewModal, setShowViewModal] = useState(false);
+    const [viewingSkill, setViewingSkill] = useState(null);
+    const [editingSkill, setEditingSkill] = useState(null);
+    const [skillContent, setSkillContent] = useState("");
+    const [modalLoaded, setModalLoaded] = useState(true);
+    const textareaRef = useRef(null);
+    const cursorPosRef = useRef({ start: 0, end: 0 });
+
+    const fetchBooks = useCallback(() => {
+      api("/books")
+        .then((r) => setBooks(r.books || []))
+        .catch((e) => setError(e.message));
+    }, []);
+
+    const fetchSkills = useCallback(() => {
+      api("/skills")
+        .then((r) => setSkills(r.skills || []))
+        .catch((e) => setError(e.message));
+    }, []);
+
+    useEffect(() => {
+      if (initialLoad) {
+        fetchBooks();
+        fetchSkills();
+        setInitialLoad(false);
+      }
+    }, [initialLoad, fetchBooks, fetchSkills]);
+
+    // Restore cursor position after render when editing
+    useLayoutEffect(() => {
+      if (textareaRef.current && cursorPosRef.current.start !== cursorPosRef.current.end) {
+        textareaRef.current.setSelectionRange(cursorPosRef.current.start, cursorPosRef.current.end);
+      }
+    });
+
+    const handleFileUpload = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      setProcessing(true);
+      setError(null);
+      setProgress(25);
+      setProgressStatus("Uploading file...");
+
+      const token = window.__HERMES_SESSION_TOKEN__ || localStorage.getItem("__hermes_pw_token__") || "";
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch(API_BASE + "/books/upload", {
+          method: "POST",
+          headers: { "X-Hermes-Session-Token": token },
+          body: formData,
+        });
+
+        if (res.status === 401) {
+          localStorage.removeItem("__hermes_pw_token__");
+          localStorage.removeItem("__hermes_pw_token_ts__");
+          window.location.reload();
+          return;
+        }
+
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.detail || res.statusText);
+
+        setProgress(100);
+        setProgressStatus("Done!");
+        setSuccess("Uploaded: " + result.uploaded + ". Click 'Create Skill' to generate a skill.");
+        fetchBooks();
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setProcessing(false);
+        setTimeout(() => { setProgress(0); setProgressStatus(""); }, 2000);
+      }
+    };
+
+    const handleCreateSkill = async (book) => {
+      setProcessing(true);
+      setError(null);
+      setProgress(0);
+      setProgressStatus("Extracting text...");
+
+      try {
+        setProgress(25);
+        const data = await api("/books/" + encodeURIComponent(book.id) + "/extract");
+        setProgress(50);
+        setProgressStatus("Running LLM extraction...");
+
+        const res = await api("/books/" + encodeURIComponent(book.id) + "/create", { method: "POST" });
+
+        setProgress(100);
+        setProgressStatus("Skill created!");
+        setSuccess("Skill generated: " + res.skill_name + " (" + (res.extraction?.concepts?.length || 0) + " concepts, " + (res.extraction?.methods?.length || 0) + " methods)");
+
+        fetchSkills();
+        fetchBooks();
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setProcessing(false);
+        setTimeout(() => { setProgress(0); setProgressStatus(""); }, 3000);
+      }
+    };
+
+    const handleDeleteBook = async (bookId) => {
+      if (!confirm("Delete this book from library? The skill (if any) will remain.")) return;
+
+      try {
+        await api("/books/" + encodeURIComponent(bookId), { method: "DELETE" });
+        fetchBooks();
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+
+    const handleViewSkill = async (skillName) => {
+      setViewingSkill(skillName);
+      setEditingSkill(skillName);
+      setModalLoaded(false);
+      try {
+        const skill = skills.find(s => s.name === skillName);
+        if (skill && skill.has_skill_md) {
+          const content = await api("/skills/" + encodeURIComponent(skillName) + "/content");
+          setSkillContent(content.content || "");
+        } else {
+          setSkillContent("# " + skillName + "\\n\\nNo SKILL.md found.");
+        }
+        setModalLoaded(true);
+        setShowViewModal(true);
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+
+    const handleSaveSkill = async () => {
+      if (!editingSkill) return;
+      try {
+        await api("/skills/" + encodeURIComponent(editingSkill) + "/content", {
+          method: "PUT",
+          body: JSON.stringify({ content: skillContent }),
+        });
+        setSuccess("Skill saved!");
+        setShowViewModal(false);
+        fetchSkills();
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+
+    const handleDeleteSkill = async (skillName) => {
+      if (!confirm("Delete this skill?")) return;
+
+      try {
+        await api("/skills/" + encodeURIComponent(skillName), { method: "DELETE" });
+        fetchSkills();
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+
+    const handleRenameSkill = async (skillName) => {
+      const newName = prompt("New skill name:", skillName);
+      if (!newName || newName === skillName) return;
+
+      try {
+        await api("/skills/" + encodeURIComponent(skillName) + "/rename", {
+          method: "PUT",
+          body: JSON.stringify({ new_name: newName }),
+        });
+        setSuccess("Skill renamed: " + skillName + " -> " + newName);
+        fetchSkills();
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+
+    // --- Skill View Modal (styled like dream-modal) ---
+    const SkillViewModal = () => {
+      if (!showViewModal || !viewingSkill) return null;
+
+      return h("div", null,
+        // Backdrop
+        h("div", { className: "bs-dream-modal-backdrop", onClick: () => setShowViewModal(false) }),
+        // Modal panel
+        h("div", { className: "bs-dream-modal-panel" },
+          h("div", { 
+            className: "bs-dream-modal-inner bs-h-[70vh]", 
+            onClick: (e) => e.stopPropagation() 
+          },
+            // Header - just the title with proper padding, X button
+            h("div", { className: "bs-dream-modal-header" },
+              h("h2", { className: "bs-text-base bs-font-semibold bs-text-gray-100 bs-m-0" }, viewingSkill.replace(/-/g, " ")),
+              h("button", {
+                onClick: () => setShowViewModal(false),
+                className: "bs-p-2 bs-rounded-lg bs-hover:bg-white/10 bs-transition-colors bs-text-muted-foreground bs-hover:bs-text-white"
+              }, h(XIcon, { className: "bs-w-4 bs-h-4" }))
+            ),
+            // Scrollable body - flex layout for textarea
+            h("div", { className: "bs-dream-modal-body" },
+              !modalLoaded
+                ? h("div", { className: "bs-flex bs-items-center bs-justify-center bs-h-full bs-text-muted-foreground" }, "Loading...")
+                : h("textarea", {
+                    ref: textareaRef,
+                    autoFocus: true,
+                    className: "bs-w-full bs-flex-1 bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-box-border bs-border bs-border-border",
+                    value: skillContent,
+                    onChange: (e) => {
+                      setSkillContent(e.target.value);
+                      // Save cursor position before state update
+                      if (e.target.selectionStart !== e.target.selectionEnd) {
+                        cursorPosRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
+                      }
+                    },
+                    spellcheck: false
+                  })
+            ),
+            // Footer - buttons at bottom right
+            h("div", { className: "bs-dream-modal-footer" },
+              h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "Cancel"),
+              h(Button, { variant: "default", size: "sm", onClick: handleSaveSkill }, "Save Changes")
+            )
+          )
+        )
+      );
+    };
+
+    // --- Books Library (separate cards like dream journal) ---
+    const renderBooksTab = () => {
+      return h("div", { className: "bs-space-y-4" },
+        h("div", { className: "bs-flex bs-items-center bs-gap-4" },
+          h("h2", { className: "bs-text-lg bs-font-semibold" }, "Book Library"),
+          h("label", { className: "bs-cursor-pointer bs-inline-flex bs-items-center bs-gap-1 bs-px-3 bs-py-1 bs-rounded bs-text-sm bs-font-medium bs-border bs-border-border", style: { cursor: "pointer" } },
+            h("input", {
+              type: "file",
+              accept: ".pdf,.epub,.txt,.mobi,.azw",
+              onChange: handleFileUpload,
+              className: "bs-hidden",
+            }),
+            h(UploadIcon, { className: "bs-w-4 bs-h-4" }),
+            "Upload Book"
+          )
+        ),
+        books.length === 0
+          ? h("div", { className: "bs-text-center bs-py-12 bs-text-muted-foreground" }, "No books uploaded yet.")
+          : h("div", { className: "bs-space-y-3" },
+              books.map((book) =>
+                h(Card, { key: book.id, className: "bs-w-full bs-cursor-pointer bs-group bs-hover:bs-border-border/80 bs-transition-all" },
+                  h(CardContent, { className: "bs-p-4", onClick: () => { if (book.has_skill) handleViewSkill(book.skill_name); } },
+                    h("div", { className: "bs-flex bs-items-center bs-justify-between bs-gap-3" },
+                      h("div", { className: "bs-flex-1" },
+                        h("div", { className: "bs-font-medium bs-text-sm bs-group-hover:bs-text-amber-300 bs-transition-colors" }, book.name),
+                        h("div", { className: "bs-text-xs bs-text-muted-foreground bs-mt-1" },
+                          (typeof book.size === "number" ? (book.size / 1024).toFixed(1) + " KB" : book.size),
+                          " • uploaded " + (typeof book.uploaded_at === "string" ? book.uploaded_at : "")
+                        )
+                      ),
+                      h("div", { className: "bs-flex bs-items-center bs-gap-2" },
+                        book.has_skill
+                          ? h(Badge, { variant: "outline", className: "bs-text-green-400 bs-border-green-400/30" }, "Skill Generated")
+                          : h(Button, {
+                              variant: "default",
+                              size: "sm",
+                              onClick: (e) => { e.stopPropagation(); handleCreateSkill(book); },
+                              disabled: processing,
+                            }, "Create Skill"),
+                        h(Button, {
+                          variant: "ghost",
+                          size: "sm",
+                          onClick: (e) => { e.stopPropagation(); handleDeleteBook(book.id); },
+                          title: "Delete book",
+                        },
+                          h(TrashIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-red-400" })
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+      );
+    };
+
+    // --- Skills Library (separate cards like dream journal) ---
+    const renderSkillsTab = () => {
+      return h("div", { className: "bs-space-y-4" },
+        h("div", { className: "bs-flex bs-items-center bs-gap-4" },
+          h("h2", { className: "bs-text-lg bs-font-semibold" }, "Skills Library")
+        ),
+        skills.length === 0
+          ? h("div", { className: "bs-text-center bs-py-12 bs-text-muted-foreground" }, "No skills generated yet.")
+          : h("div", { className: "bs-space-y-3" },
+              skills.map((skill) =>
+                h(Card, { key: skill.name, className: "bs-w-full bs-cursor-pointer bs-group bs-hover:bs-border-border/80 bs-transition-all" },
+                  h(CardContent, { className: "bs-p-4" },
+                    h("div", { className: "bs-flex bs-items-center bs-justify-between bs-gap-3" },
+                      h("div", { className: "bs-flex-1", onClick: () => handleViewSkill(skill.name) },
+                        h("div", { className: "bs-font-medium bs-text-sm bs-capitalize bs-group-hover:bs-text-amber-300 bs-transition-colors" }, skill.name.replace(/-/g, " ")),
+                        h("div", { className: "bs-text-xs bs-text-muted-foreground bs-mt-1" }, skill.has_skill_md ? "Skill • Ready" : "Missing SKILL.md")
+                      ),
+                      h("div", { className: "bs-flex bs-items-center bs-gap-2" },
+                        h(Button, {
+                          variant: "ghost",
+                          size: "sm",
+                          onClick: () => handleRenameSkill(skill.name),
+                          title: "Rename skill",
+                        },
+                          h(EditIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-blue-400" })
+                        ),
+                        h(Button, {
+                          variant: "ghost",
+                          size: "sm",
+                          onClick: () => handleDeleteSkill(skill.name),
+                          title: "Delete skill",
+                        },
+                          h(TrashIcon, { className: "bs-w-3.5 bs-h-3.5 bs-text-red-400" })
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+      );
+    };
+
+    return h("div", { className: "bs-max-w-4xl bs-mx-auto" },
+      error && h("div", { className: "bs-text-xs bs-text-red-400 bs-bg-red-500/10 bs-rounded bs-p-2 bs-mb-4" }, "⚠ " + error),
+      success && h("div", { className: "bs-text-xs bs-text-green-400 bs-bg-green-500/10 bs-rounded bs-p-2 bs-mb-4" }, h(CheckIcon, { className: "bs-inline bs-w-3 bs-h-3 bs-mr-1" }), success),
+
+      // Header
+      h("div", { className: "bs-mb-6 bs-pb-4 bs-border-b bs-border-border" },
+        h("div", { className: "bs-flex bs-items-center bs-gap-3 bs-mb-3" },
+          h("div", { className: "bs-w-12 bs-h-12 bs-rounded-lg bs-flex bs-items-center bs-justify-center bs-shrink-0 bs-bg-amber-500/10" },
+            h(BookIcon, { className: "bs-w-7 bs-h-7 bs-text-amber-400" })
+          ),
+          h("div", null,
+            h("h1", { className: "bs-text-2xl bs-font-bold bs-text-white bs-m-0" }, "BookSkills"),
+            h("p", { className: "bs-text-sm bs-text-muted-foreground bs-m-0 bs-mt-1" },
+              "Upload PDF, EPUB, or TXT books to generate reusable Hermes skills."
+            )
+          )
+        ),
+        progress > 0 && h(ProgressBar, { progress, status: progressStatus }),
+        progressStatus && h("div", { className: "bs-text-xs bs-text-muted-foreground bs-mb-2" }, progressStatus)
+      ),
+
+      // Tabs
+      h("div", { className: "bs-flex bs-gap-2 bs-mb-4 bs-border-b bs-border-border bs-pb-2" },
+        h(Button, {
+          variant: activeTab === "books" ? "default" : "ghost",
+          size: "sm",
+          onClick: () => setActiveTab("books"),
+        }, "Books (" + books.length + ")"),
+        h(Button, {
+          variant: activeTab === "skills" ? "default" : "ghost",
+          size: "sm",
+          onClick: () => setActiveTab("skills"),
+        }, "Skills (" + skills.length + ")")
+      ),
+
+      // Content
+      activeTab === "books" ? renderBooksTab() : renderSkillsTab(),
+
+      // Modal
+      h(SkillViewModal)
+    );
+  }
+
+  // --- Register plugin ---
+  window.__HERMES_PLUGINS__.register("hermes-book-skills", BookSkillsApp);
+})();

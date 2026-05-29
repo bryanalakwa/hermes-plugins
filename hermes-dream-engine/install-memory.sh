@@ -54,7 +54,7 @@ step "1" "Installing holographic memory provider"
 
 # The holographic memory store is part of hermes-agent's memory plugins
 # Check if it's already available
-"$PYTHON" -c "
+"$VENV_PYTHON" -c "
 import sys
 sys.path.insert(0, '${HERMES_AGENT}')
 try:

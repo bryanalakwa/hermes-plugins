@@ -125,7 +125,7 @@ echo "── Receiver Agent ──"
 echo "Enter the details of the agent you want to talk to."
 echo ""
 
-read -rp "Receiver's Tailscale Funnel URL (e.g., https://remy.tailXXXXX.ts.net): " RECEIVER_URL
+read -rp "Receiver's Tailscale Funnel URL (e.g., https://my-agent.tailXXXXX.ts.net): " RECEIVER_URL
 if [[ -z "$RECEIVER_URL" ]]; then
     echo "ERROR: URL is required."
     exit 1

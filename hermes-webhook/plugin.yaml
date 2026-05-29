@@ -19,10 +19,10 @@ config:
 paths:
   config: $HERMES_HOME/config.yaml
   history: $HERMES_HOME/webhookHistory.json
-  send_script: $HERMES_AGENT/plugins/hermes-webhook/scripts/send_webhook.py
-  bash_sender: $HERMES_AGENT/plugins/hermes-webhook/scripts/send.sh
-  setup_script: $HERMES_AGENT/plugins/hermes-webhook/scripts/setup.sh
-  protocol: $HERMES_AGENT/plugins/hermes-webhook/references/protocol.md
+  send_script: $HERMES_HOME/plugins/hermes-webhook/scripts/send_webhook.py
+  bash_sender: $HERMES_HOME/plugins/hermes-webhook/scripts/send.sh
+  setup_script: $HERMES_HOME/plugins/hermes-webhook/scripts/setup.sh
+  protocol: $HERMES_HOME/plugins/hermes-webhook/references/protocol.md
 dashboard:
   tab: /agents
   position: after:dreams

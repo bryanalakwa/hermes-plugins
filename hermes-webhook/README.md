@@ -55,7 +55,7 @@ inter_agent_webhook:
 
 ```bash
 # AI-processed ping (the receiving agent thinks and responds)
-bash scripts/send.sh ping "Hello from Eliana!"
+bash scripts/send.sh ping "Hello from my agent!"
 
 # Direct notification (delivered as-is)
 bash scripts/send.sh notify "System alert: backup complete"

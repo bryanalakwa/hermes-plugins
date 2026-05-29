@@ -34,8 +34,7 @@ if nick and nick in receivers:
         'secret': r.get('secret', ''),
         'route_ping': r.get('route_ping', 'agent-ping'),
         'route_notify': r.get('route_notify', 'agent-notify'),
-    }))
-" "$CONFIG" "$RECEIVER_NICK" 2>/dev/null) || CONFIG_JSON=""
+    }))" "$CONFIG" "$RECEIVER_NICK" 2>/dev/null) || CONFIG_JSON=""
 fi
 
 if [[ -n "$CONFIG_JSON" ]]; then
@@ -56,27 +55,25 @@ fi
 # ── Validate ────────────────────────────────────────────
 if [[ -z "$BASE_URL" ]]; then
     echo "ERROR: No receiver URL configured."
-    echo "Run setup first: bash ~/.hermes/skills/inter-agent-webhook/scripts/setup.sh"
+    echo "Run setup first: bash ~/.hermes/plugins/hermes-webhook/scripts/setup.sh"
     exit 1
 fi
 
 if [[ -z "$SECRET" ]]; then
     echo "ERROR: No webhook secret configured."
-    echo "Run setup first: bash ~/.hermes/skills/inter-agent-webhook/scripts/setup.sh"
+    echo "Run setup first: bash ~/.hermes/plugins/hermes-webhook/scripts/setup.sh"
     exit 1
 fi
 
 # ── Build payload ───────────────────────────────────────
 PAYLOAD=$(python3 -c "
 import json, sys
-print(json.dumps({'message': sys.argv[1], 'sender': sys.argv[2]}))
-" "$MESSAGE" "$MY_NAME")
+print(json.dumps({'message': sys.argv[1], 'sender': sys.argv[2]}))" "$MESSAGE" "$MY_NAME")
 
 # ── Compute HMAC-SHA256 signature ───────────────────────
 SIGNATURE=$(python3 -c "
 import hmac, hashlib, sys
-print(hmac.new(sys.argv[1].encode(), sys.argv[2].encode(), hashlib.sha256).hexdigest())
-" "$SECRET" "$PAYLOAD")
+print(hmac.new(sys.argv[1].encode(), sys.argv[2].encode(), hashlib.sha256).hexdigest())" "$SECRET" "$PAYLOAD")
 
 # ── Select route ────────────────────────────────────────
 case "$MODE" in

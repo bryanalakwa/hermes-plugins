@@ -88,15 +88,39 @@ ok "Created book-library directory"
 
 # ── Step 4: Python dependencies ───────────────────────────
 info "Step 4/7: Checking Python dependencies..."
-for dep in PyPDF2 EbookLib beautifulsoup4 pyyaml; do
-  if "$HERMES_AGENT/venv/bin/pip" show "$dep" &>/dev/null; then
-    ok "$dep already installed"
-  else
-    info "Installing $dep..."
-    "$HERMES_AGENT/venv/bin/pip" install "$dep" 2>&1 | tail -2
-    ok "$dep installed"
-  fi
-done
+
+# Check/import based (more reliable than pip show)
+"$VENV_PYTHON" -c "import PyPDF2" 2>/dev/null && {
+  ok "PyPDF2 already installed"
+} || {
+  info "Installing PyPDF2..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet PyPDF2
+  ok "PyPDF2 installed"
+}
+
+"$VENV_PYTHON" -c "import ebooklib" 2>/dev/null && {
+  ok "EbookLib already installed"
+} || {
+  info "Installing EbookLib..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet EbookLib
+  ok "EbookLib installed"
+}
+
+"$VENV_PYTHON" -c "import bs4" 2>/dev/null && {
+  ok "beautifulsoup4 already installed"
+} || {
+  info "Installing beautifulsoup4..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet beautifulsoup4
+  ok "beautifulsoup4 installed"
+}
+
+"$VENV_PYTHON" -c "import yaml" 2>/dev/null && {
+  ok "PyYAML already installed"
+} || {
+  info "Installing PyYAML..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet pyyaml
+  ok "PyYAML installed"
+}
 
 # ── Step 5: Create skills directory ───────────────────────
 info "Step 5/7: Setting up skills directory..."

@@ -70,6 +70,10 @@
 .bs-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bs-capitalize { text-transform: capitalize; }
 
+/* Cursor utilities */
+.bs-cursor-pointer { cursor: pointer; }
+.bs-cursor-default { cursor: default; }
+
 /* Height utilities for modal */
 .bs-h-\[70vh\] { height: 70vh; }
 

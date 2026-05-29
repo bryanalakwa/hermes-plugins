@@ -139,6 +139,10 @@ if ! "$VENV_PYTHON" -c "import bcrypt" 2>/dev/null; then
   ok "bcrypt installed"
 fi
 
+# Add your plugin-specific dependencies here:
+# "$VENV_PYTHON" -c "import PyPDF2" 2>/dev/null || "$HERMES_AGENT/venv/bin/pip" install --quiet PyPDF2
+# "$VENV_PYTHON" -c "import ebooklib" 2>/dev/null || "$HERMES_AGENT/venv/bin/pip" install --quiet EbookLib
+
 # Dashboard password gate setup (optional - ask on first install)
 DASHBOARD_AUTH="$HERMES_HOME/dashboard.auth"
 if [ ! -f "$DASHBOARD_AUTH" ]; then

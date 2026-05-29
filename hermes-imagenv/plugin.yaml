@@ -1,0 +1,29 @@
+name: hermes-imagenv
+version: 1.0.0
+description: >
+  Local image generation via Stable Diffusion/LCM. Gradio web interface
+  for creating images with CPU-optimized inference.
+hooks: []
+config:
+  comfyui_url:
+    default: http://127.0.0.1:8188
+    description: ComfyUI API endpoint (if using ComfyUI as backend)
+  output_dir:
+    default: imagenv-output
+    description: Directory for saved images
+dashboard:
+  tab: /imagenv
+  position: after:agents
+  icon: Image
+dependencies:
+  python:
+    - torch>=2.0.0
+    - diffusers>=0.24.0
+    - Pillow>=9.0.0
+    - numpy>=1.21.0
+    - gradio>=4.0.0
+paths:
+  gradio_app: $HERMES_HOME/plugins/hermes-imagenv/gradio_app.py
+  output: $HERMES_HOME/imagenv-output
+scripts:
+  start: .hermes/scripts/run_imagenv.py

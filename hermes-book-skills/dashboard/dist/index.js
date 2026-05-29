@@ -1,5 +1,5 @@
 /**
- * BookSkills Dashboard Plugin v1.3
+ * BookSkills Dashboard Plugin v1.0
  *
  * Upload books, generate skills, manage libraries.
  * Calls backend at /api/plugins/hermes-book-skills/

@@ -122,3 +122,38 @@ This pattern:
 - Prompts only on first install (skips if `dashboard.auth` exists)
 - Allows user to skip by pressing Enter
 - Uses the venv python to avoid environment issues
+
+### Plugin-Specific Dependencies Example
+
+For plugins that need additional Python packages, use import-based checks:
+
+```bash
+# PyPDF2 for PDF parsing
+"$VENV_PYTHON" -c "import PyPDF2" 2>/dev/null && {
+  ok "PyPDF2 already installed"
+} || {
+  info "Installing PyPDF2..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet PyPDF2
+  ok "PyPDF2 installed"
+}
+
+# EbookLib for EPUB handling
+"$VENV_PYTHON" -c "import ebooklib" 2>/dev/null && {
+  ok "EbookLib already installed"
+} || {
+  info "Installing EbookLib..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet EbookLib
+  ok "EbookLib installed"
+}
+
+# beautifulsoup4 for HTML parsing (import as bs4)
+"$VENV_PYTHON" -c "import bs4" 2>/dev/null && {
+  ok "beautifulsoup4 already installed"
+} || {
+  info "Installing beautifulsoup4..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet beautifulsoup4
+  ok "beautifulsoup4 installed"
+}
+```
+
+**Note:** Always check imports using the actual module name (`bs4`, not `beautifulsoup4`) since that's what `import` uses.

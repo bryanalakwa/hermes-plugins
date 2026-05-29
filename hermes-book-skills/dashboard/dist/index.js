@@ -1,5 +1,5 @@
 /**
- * BookSkills Dashboard Plugin v1.2
+ * BookSkills Dashboard Plugin v1.3
  *
  * Upload books, generate skills, manage libraries.
  * Calls backend at /api/plugins/hermes-book-skills/
@@ -68,7 +68,7 @@
     h("path", { d: "m6 9 6 6 6-6" })
   );
 
-  const XIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
+  const XIcon = (props) => h("svg", Object.assign({ xmlns: "http://www.w3.org/2000/svg", width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 }, props || {}),
     h("path", { d: "M18 6 6 18" }), h("path", { d: "m6 6 12 12" })
   );
 
@@ -265,37 +265,36 @@
     const SkillViewModal = () => {
       if (!showViewModal || !viewingSkill) return null;
 
-      return h("div", { className: "bs-fixed bs-inset-0 bs-z-50" },
+      return h("div", null,
         // Backdrop
         h("div", { className: "bs-dream-modal-backdrop", onClick: () => setShowViewModal(false) }),
         // Modal panel
         h("div", { className: "bs-dream-modal-panel" },
-          h("div", { className: "bs-dream-modal-inner bs-h-[70vh]", onClick: (e) => e.stopPropagation() },
-            // Header - just the title, close button with no bg
-            h("div", { className: "bs-flex bs-items-center bs-justify-between bs-px-6 bs-py-3 bs-border-b bs-border-border bs-flex-shrink-0" },
+          h("div", { 
+            className: "bs-dream-modal-inner bs-h-[70vh]", 
+            onClick: (e) => e.stopPropagation() 
+          },
+            // Header - just the title with proper padding, X button
+            h("div", { className: "bs-dream-modal-header" },
               h("h2", { className: "bs-text-base bs-font-semibold bs-text-gray-100 bs-m-0" }, viewingSkill.replace(/-/g, " ")),
-              h(Button, {
-                variant: "ghost",
-                size: "sm",
-                className: "bs-p-1 bs-text-muted-foreground hover:bs-text-white bs-bg-transparent hover:bs-bg-transparent",
-                onClick: () => setShowViewModal(false)
+              h("button", {
+                onClick: () => setShowViewModal(false),
+                className: "bs-p-2 bs-rounded-lg bs-hover:bg-white/10 bs-transition-colors bs-text-muted-foreground bs-hover:bs-text-white"
               }, h(XIcon, { className: "bs-w-4 bs-h-4" }))
             ),
-            // Scrollable body - 50vh textarea
+            // Scrollable body - flex layout for textarea
             h("div", { className: "bs-dream-modal-body" },
               !modalLoaded
                 ? h("div", { className: "bs-flex bs-items-center bs-justify-center bs-h-full bs-text-muted-foreground" }, "Loading...")
                 : h("textarea", {
-                    className: "bs-w-full bs-h-[50vh] bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-p-4 bs-box-border bs-border bs-border-border",
+                    className: "bs-w-full bs-flex-1 bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-p-4 bs-box-border bs-border bs-border-border",
                     value: skillContent,
                     onChange: (e) => setSkillContent(e.target.value),
-                    spellcheck: false,
-                    autoFocus: true,
-                    onFocus: (e) => e.target.select(),
+                    spellcheck: false
                   })
             ),
             // Footer - buttons at bottom right
-            h("div", { className: "bs-flex bs-justify-end bs-gap-3 bs-px-6 bs-py-3 bs-border-t bs-border-border bs-flex-shrink-0 bs-bg-black/20" },
+            h("div", { className: "bs-dream-modal-footer" },
               h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "Cancel"),
               h(Button, { variant: "default", size: "sm", onClick: handleSaveSkill }, "Save Changes")
             )

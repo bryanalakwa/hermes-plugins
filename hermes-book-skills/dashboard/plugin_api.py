@@ -23,7 +23,10 @@ except ImportError:
 try:
     from fastapi import APIRouter, HTTPException, Query, UploadFile, File
     from fastapi.responses import JSONResponse
+    _fastapi_available = True
 except Exception:
+    _fastapi_available = False
+    # Stub classes for import failure case
     class APIRouter:
         def get(self, *_args, **_kwargs):
             return lambda fn: fn
@@ -37,6 +40,7 @@ except Exception:
     def UploadFile(*args, **kwargs):
         pass
 
+# Create the router at module level (available in both success and failure cases)
 router = APIRouter()
 
 HOME = get_hermes_home()

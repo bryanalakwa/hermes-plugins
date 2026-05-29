@@ -10,7 +10,8 @@
 #   3. Installs Python dependencies (PyPDF2, EbookLib, beautifulsoup4)
 #   4. Creates book-library directory
 #   5. Creates skills/book-skills directory
-#   6. Restarts gateway to pick up changes
+#   6. Sets up dashboard password gate (optional)
+#   7. Restarts gateway to pick up changes
 #
 # Usage:
 #   chmod +x install.sh
@@ -53,21 +54,21 @@ if [ ! -f "$VENV_PYTHON" ]; then
 fi
 
 # ── Step 1: Remove old version (fresh install) ───────────
-info "Step 1/6: Removing old version if present..."
+info "Step 1/7: Removing old version if present..."
 if [ -d "$PLUGIN_DEST" ]; then
   rm -rf "$PLUGIN_DEST"
   ok "Removed old plugin at $PLUGIN_DEST"
 fi
 
 # ── Step 2: Create directory structure ────────────────────
-info "Step 2/6: Creating plugin directory structure..."
+info "Step 2/7: Creating plugin directory structure..."
 mkdir -p "$PLUGIN_DEST/dashboard/dist"
 mkdir -p "$PLUGIN_DEST/scripts"
 mkdir -p "$PLUGIN_DEST/references"
 ok "Directory structure created"
 
 # ── Step 3: Copy all plugin files ───────────────────────
-info "Step 3/6: Copying plugin files..."
+info "Step 3/7: Copying plugin files..."
 
 # Core plugin files
 cp "$SCRIPT_DIR/__init__.py" "$PLUGIN_DEST/__init__.py"
@@ -86,7 +87,7 @@ mkdir -p "$HERMES_HOME/book-library"
 ok "Created book-library directory"
 
 # ── Step 4: Python dependencies ───────────────────────────
-info "Step 4/6: Checking Python dependencies..."
+info "Step 4/7: Checking Python dependencies..."
 for dep in PyPDF2 EbookLib beautifulsoup4 pyyaml; do
   if "$HERMES_AGENT/venv/bin/pip" show "$dep" &>/dev/null; then
     ok "$dep already installed"
@@ -98,12 +99,45 @@ for dep in PyPDF2 EbookLib beautifulsoup4 pyyaml; do
 done
 
 # ── Step 5: Create skills directory ───────────────────────
-info "Step 5/6: Setting up skills directory..."
+info "Step 5/7: Setting up skills directory..."
 mkdir -p "$HERMES_HOME/skills/book-skills"
 ok "Created skills/book-skills directory"
 
-# ── Step 6: Restart gateway ───────────────────────────────
-info "Step 6/6: Restarting gateway to pick up changes..."
+# ── Step 6: Dashboard password gate setup ────────────────────
+info "Step 6/7: Dashboard password gate setup..."
+DASHBOARD_AUTH="$HERMES_HOME/dashboard.auth"
+
+# Check if bcrypt is installed
+if ! "$VENV_PYTHON" -c "import bcrypt" 2>/dev/null; then
+  info "Installing bcrypt for password gate..."
+  "$HERMES_AGENT/venv/bin/pip" install --quiet bcrypt
+  ok "bcrypt installed"
+fi
+
+# Prompt for password if not already configured
+if [ ! -f "$DASHBOARD_AUTH" ]; then
+  echo ""
+  echo "The dashboard password gate protects your agent's web UI."
+  read -rsp "Set a dashboard password (press Enter to skip): " PASSWORD
+  echo ""
+  if [ -n "$PASSWORD" ]; then
+    HASH=$("$VENV_PYTHON" -c "
+import bcrypt
+password = '''$PASSWORD'''
+hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+print(hash)
+")
+    echo "$HASH" > "$DASHBOARD_AUTH"
+    ok "Dashboard password set"
+  else
+    ok "No password set - dashboard accessible without authentication"
+  fi
+else
+  ok "Dashboard password already configured"
+fi
+
+# ── Step 7: Restart gateway ───────────────────────────────
+info "Step 7/7: Restarting gateway to pick up changes..."
 if [ "${NO_RESTART:-}" = "1" ]; then
   warn "Skipping gateway restart (NO_RESTART=1)"
 else

@@ -1,18 +1,18 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # ─────────────────────────────────────────────────────────
 # Plugin Installer Template
 # ─────────────────────────────────────────────────────────
-# A standardized install.sh for Hermes plugins that handles
-# upgrades safely WITHOUT destroying user data.
+# A standardized install.sh for Hermes plugins that handles:
+#   1. Removes old plugin code (preserves user data)
+#   2. Creates directory structure
+#   3. Copies plugin files
+#   4. Installs Python dependencies (bcrypt, PyYAML + plugin-specific)
+#   5. Prompts for dashboard password gate (if not configured)
+#   6. Restores preserved user data
+#   7. Restarts gateway to pick up changes
 #
 # KEY PRINCIPLE: User data lives in $HERMES_HOME/ or $HERMES_AGENT/
 # Plugin code lives in $PLUGIN_DEST/ — these are ALWAYS separate.
-#
-# During upgrades:
-#   - User data files are NEVER deleted
-#   - Existing config is preserved
-#   - History/logs are preserved
-#   - Only plugin code (this repo) is refreshed
 #
 # Usage:
 #   chmod +x install.sh
@@ -71,7 +71,7 @@ for data_file in "${USER_DATA_FILES[@]}"; do
 done
 
 # ── Step 1: Remove old plugin code (NOT user data) ────────
-info "Step 1/5: Removing old plugin files..."
+info "Step 1/7: Removing old plugin files..."
 if [ -d "$PLUGIN_DEST" ]; then
   # ONLY remove the plugin directory — user data is elsewhere
   rm -rf "$PLUGIN_DEST"
@@ -81,14 +81,14 @@ else
 fi
 
 # ── Step 2: Create directory structure ──────────────────────
-info "Step 2/5: Creating plugin directory structure..."
+info "Step 2/7: Creating plugin directory structure..."
 mkdir -p "$PLUGIN_DEST/dashboard/dist"
 mkdir -p "$PLUGIN_DEST/scripts"
 mkdir -p "$PLUGIN_DEST/references"
 ok "Directory structure created"
 
 # ── Step 3: Copy plugin files ───────────────────────────────
-info "Step 3/5: Copying plugin files..."
+info "Step 3/7: Copying plugin files..."
 
 # Root-level files
 for f in __init__.py plugin.yaml; do
@@ -121,7 +121,7 @@ fi
 ok "Plugin files copied"
 
 # ── Step 4: Install dependencies ───────────────────────────
-info "Step 4/5: Installing dependencies..."
+info "Step 4/7: Installing dependencies..."
 
 # PyYAML for config parsing (common dependency)
 "$VENV_PYTHON" -c "import yaml" 2>/dev/null && {
@@ -143,8 +143,12 @@ fi
 # "$VENV_PYTHON" -c "import PyPDF2" 2>/dev/null || "$HERMES_AGENT/venv/bin/pip" install --quiet PyPDF2
 # "$VENV_PYTHON" -c "import ebooklib" 2>/dev/null || "$HERMES_AGENT/venv/bin/pip" install --quiet EbookLib
 
-# Dashboard password gate setup (optional - ask on first install)
+ok "Dependencies ready"
+
+# ── Step 5: Dashboard password gate setup ────────────────────
+info "Step 5/7: Dashboard password gate setup..."
 DASHBOARD_AUTH="$HERMES_HOME/dashboard.auth"
+
 if [ ! -f "$DASHBOARD_AUTH" ]; then
   echo ""
   echo "The dashboard password gate protects your agent's web UI."
@@ -162,10 +166,12 @@ print(hash)
   else
     ok "No password set - dashboard accessible without authentication"
   fi
+else
+  ok "Dashboard password already configured"
 fi
 
-# ── Step 5: Restore user data ───────────────────────────────
-info "Step 5/5: Restoring preserved user data..."
+# ── Step 6: Restore user data ───────────────────────────────
+info "Step 6/7: Restoring preserved user data..."
 for data_file in "${USER_DATA_FILES[@]}"; do
   full_path="$HERMES_HOME/$data_file"
   backup_path="${full_path}.upgrade_backup"
@@ -181,7 +187,8 @@ for data_file in "${USER_DATA_FILES[@]}"; do
   fi
 done
 
-# ── Restart gateway ───────────────────────────────────────
+# ── Step 7: Restart gateway ───────────────────────────────────────
+info "Step 7/7: Restarting gateway to pick up changes..."
 if [ "${NO_RESTART:-}" = "1" ]; then
   warn "Skipping gateway restart (NO_RESTART=1)"
 else

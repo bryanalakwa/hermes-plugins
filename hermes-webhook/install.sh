@@ -57,18 +57,14 @@ fi
 
 PYTHON="$VENV_PYTHON"
 
-# ── Step 1: Remove old version ─────────────────────────────
-info "Step 1/9: Removing any old version of the plugin..."
-if [ -d "$PLUGIN_DEST" ]; then
-  rm -rf "$PLUGIN_DEST"
-  ok "Removed old plugin at $PLUGIN_DEST"
-else
-  info "No previous installation found (fresh install)"
-fi
+# ── Step 1: Plugin destination ready ─────────────────────────────
+# Note: We do NOT rm -rf here because this script runs from within the plugin directory
+# Files are copied in-place which updates existing installations safely
+info "Step 1/9: Preparing plugin directory..."
+mkdir -p "$PLUGIN_DEST"
 
 # ── Step 2: Create directory structure ───────────────────────
 info "Step 2/9: Creating plugin directory structure..."
-mkdir -p "$PLUGIN_DEST/dashboard/dist"
 mkdir -p "$PLUGIN_DEST/scripts"
 mkdir -p "$PLUGIN_DEST/references"
 ok "Directory structure created"

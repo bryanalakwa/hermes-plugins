@@ -5,14 +5,9 @@ set -e
 
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 PLUGIN_DEST="$HERMES_HOME/plugins/hermes-imagenv"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "📦 Installing hermes-imagenv plugin..."
-
-# Handle update - remove existing plugin if present
-if [ -d "$PLUGIN_DEST" ]; then
-    echo "🔄 Updating existing plugin..."
-    rm -rf "$PLUGIN_DEST"
-fi
 
 # Check for required dependencies
 check_import() {
@@ -39,16 +34,22 @@ if ! check_import "torch"; then
     pip install torch --index-url https://download.pytorch.org/whl/cpu --quiet
 fi
 
-# Create directories
+# Create directories (safe - no rm -rf since we run from plugin dir)
 mkdir -p "$PLUGIN_DEST/scripts"
 mkdir -p "$PLUGIN_DEST/dashboard"
 mkdir -p "$HERMES_HOME/cache/ImGen/models"
 mkdir -p "$HERMES_HOME/cache/ImGen/output"
 
 # Copy plugin files
-cp -r scripts/* "$PLUGIN_DEST/scripts/" 2>/dev/null || true
-cp -r dashboard/* "$PLUGIN_DEST/dashboard/" 2>/dev/null || true
-cp SKILL.md "$PLUGIN_DEST/" 2>/dev/null || true
+if [ "$SCRIPT_DIR" != "$PLUGIN_DEST" ]; then
+    # Normal install - copy files
+    cp -r scripts/* "$PLUGIN_DEST/scripts/" 2>/dev/null || true
+    cp -r dashboard/* "$PLUGIN_DEST/dashboard/" 2>/dev/null || true
+    cp SKILL.md "$PLUGIN_DEST/" 2>/dev/null || true
+else
+    # Running from within installed plugin dir - skip copy
+    echo "(Running from installed location - files already in place)"
+fi
 
 # Validate plugin_api.py syntax if present
 if [ -f "$PLUGIN_DEST/dashboard/plugin_api.py" ]; then

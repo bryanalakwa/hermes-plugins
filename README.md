@@ -40,7 +40,7 @@ What the installer does:
 1. Sets up holographic fact store (SQLite + FTS5 + WAL)
 2. Creates memory directory structure (`~/.hermes/memories/`)
 3. Configures `memory.provider: holographic` in config.yaml
-4. Copies plugin files to `~/.hermes/hermes-agent/plugins/`
+4. Copies plugin files to `~/.hermes/plugins/`
 5. Installs dependencies
 6. Verifies installation
 
@@ -78,7 +78,7 @@ Plugins follow a standardized installer pattern. See `templates/install-sh-templ
 
 ### Key Rules
 
-1. **User data separation**: All user data MUST be stored in `$HERMES_HOME/<plugin-name>/` — NEVER in the plugin code directory (`$HERMES_AGENT/plugins/<plugin-name>/`). The installer will completely replace plugin code during upgrades.
+1. **User data separation**: All user data MUST be stored in `$HERMES_HOME/<plugin-name>/` — NEVER in the plugin code directory (`$HERMES_HOME/plugins/<plugin-name>/`). The installer will completely replace plugin code during upgrades.
 
 2. **Safe upgrades**: Install scripts use `rm -rf "$PLUGIN_DEST"` to remove old code, then copy fresh. Your user data must survive this. See `templates/plugin-development-guide.md` for details.
 
@@ -93,6 +93,7 @@ hermes-plugins/
 │   └── plugin-development-guide.md   # User data preservation rules
 ├── hermes-dream-engine/            # Example plugin (user data in ~/.hermes/dream_engine/)
 ├── hermes-webhook/               # Example plugin (user data in ~/.hermes/webhookHistory.json)
+├── hermes-book-skills/           # Example plugin (user data in ~/.hermes/book-library/)
 ```
 
 ## Contributing

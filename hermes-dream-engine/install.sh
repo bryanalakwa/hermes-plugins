@@ -8,7 +8,8 @@
 #   2. Copies plugin files to ~/.hermes/plugins/
 #   3. Installs Python dependencies (bcrypt, PyYAML)
 #   4. Sets up dashboard password gate (optional)
-#   5. Verifies installation
+#   5. Configures plugin in config.yaml
+#   6. Verifies installation
 #
 # Usage:
 #   chmod +x install.sh
@@ -224,10 +225,10 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════
-# PHASE 5: Verification
+# PHASE 6: Verification
 # ══════════════════════════════════════════════════════════
 echo ""
-echo -e "${BOLD}━━ Phase 5: Verification ━━${NC}"
+echo -e "${BOLD}━━ Phase 6: Verification ━━${NC}"
 echo ""
 
 ERRORS=0

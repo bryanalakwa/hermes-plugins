@@ -70,6 +70,10 @@
 .bs-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bs-capitalize { text-transform: capitalize; }
 
+/* Height utilities for modal */
+.bs-h-\[70vh\] { height: 70vh; }
+.bs-h-\[50vh\] { height: 50vh; }
+
 /* Modal styles matching dream-modal-panel pattern */
 .bs-dream-modal-backdrop {
   position: fixed;

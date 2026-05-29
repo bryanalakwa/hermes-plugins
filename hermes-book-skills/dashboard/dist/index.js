@@ -270,26 +270,23 @@
         h("div", { className: "bs-dream-modal-backdrop", onClick: () => setShowViewModal(false) }),
         // Modal panel
         h("div", { className: "bs-dream-modal-panel" },
-          h("div", { className: "bs-dream-modal-inner", onClick: (e) => e.stopPropagation() },
-            // Header
-            h("div", { className: "bs-flex bs-items-center bs-justify-between bs-px-6 bs-py-4 bs-border-b bs-border-border bs-flex-shrink-0" },
-              h("div", { className: "bs-flex bs-items-center bs-gap-3" },
-                h("div", { className: "bs-p-2 bs-rounded-lg bs-bg-amber-500/10" },
-                  h(BookIcon, { className: "bs-w-5 bs-h-5 bs-text-amber-400" })
-                ),
-                h("div", null,
-                  h("h2", { className: "bs-text-base bs-font-semibold bs-text-gray-100" }, viewingSkill.replace(/-/g, " ")),
-                  h("p", { className: "bs-text-xs bs-text-muted-foreground bs-mt-0.5" }, "Skill • Click entry to view")
-                )
-              ),
-              h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "✕")
+          h("div", { className: "bs-dream-modal-inner bs-h-[70vh]", onClick: (e) => e.stopPropagation() },
+            // Header - just the title, close button with no bg
+            h("div", { className: "bs-flex bs-items-center bs-justify-between bs-px-6 bs-py-3 bs-border-b bs-border-border bs-flex-shrink-0" },
+              h("h2", { className: "bs-text-base bs-font-semibold bs-text-gray-100 bs-m-0" }, viewingSkill.replace(/-/g, " ")),
+              h(Button, {
+                variant: "ghost",
+                size: "sm",
+                className: "bs-p-1 bs-text-muted-foreground hover:bs-text-white bs-bg-transparent hover:bs-bg-transparent",
+                onClick: () => setShowViewModal(false)
+              }, h(XIcon, { className: "bs-w-4 bs-h-4" }))
             ),
-            // Scrollable body
+            // Scrollable body - 50vh textarea
             h("div", { className: "bs-dream-modal-body" },
               !modalLoaded
                 ? h("div", { className: "bs-flex bs-items-center bs-justify-center bs-h-full bs-text-muted-foreground" }, "Loading...")
                 : h("textarea", {
-                    className: "bs-w-full bs-h-full bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-p-4 bs-box-border bs-border bs-border-border focus:bs-outline-none focus:bs-ring-2 focus:bs-ring-amber-500",
+                    className: "bs-w-full bs-h-[50vh] bs-bg-secondary bs-text-xs bs-font-mono bs-rounded bs-resize-none bs-overflow-y-auto bs-p-4 bs-box-border bs-border bs-border-border",
                     value: skillContent,
                     onChange: (e) => setSkillContent(e.target.value),
                     spellcheck: false,
@@ -297,8 +294,8 @@
                     onFocus: (e) => e.target.select(),
                   })
             ),
-            // Footer
-            h("div", { className: "bs-flex bs-justify-end bs-gap-3 bs-px-6 bs-py-4 bs-border-t bs-border-border bs-flex-shrink-0 bs-bg-black/20" },
+            // Footer - buttons at bottom right
+            h("div", { className: "bs-flex bs-justify-end bs-gap-3 bs-px-6 bs-py-3 bs-border-t bs-border-border bs-flex-shrink-0 bs-bg-black/20" },
               h(Button, { variant: "ghost", size: "sm", onClick: () => setShowViewModal(false) }, "Cancel"),
               h(Button, { variant: "default", size: "sm", onClick: handleSaveSkill }, "Save Changes")
             )

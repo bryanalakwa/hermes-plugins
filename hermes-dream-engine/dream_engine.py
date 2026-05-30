@@ -19,19 +19,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Import trust_scoring from hermes-agent's holographic memory plugin
-# This enables source-aware trust computation for dream-generated facts
+_hermes_home = Path.home() / ".hermes" / "hermes-agent"
 import sys
-_hermes_agent_path = Path.home() / ".hermes" / "hermes-agent"
-if str(_hermes_agent_path) not in sys.path:
-    sys.path.insert(0, str(_hermes_agent_path))
+if str(_hermes_home) not in sys.path:
+    sys.path.insert(0, str(_hermes_home))
+from plugins.memory.holographic import trust_scoring
 
 logger = logging.getLogger(__name__)
-
-try:
-    from plugins.memory.holographic import trust_scoring
-except ImportError:
-    # Fallback: trust_scoring may be bundled with the plugin
-    trust_scoring = None  # type: ignore[assignment]
 
 
 class DreamSession:
@@ -508,6 +502,113 @@ IMPORTANT: Output at least one item per category if any exist.
 
         return s
 
+    def run_phase(self, phase_name: str, memory_count: int = 150,
+                  connection_target: int = 7, **kwargs) -> DreamSession:
+        """Execute a single dream phase independently.
+
+        This enables selective invocation of phases without the full pipeline.
+        Useful for targeted dream work or testing individual phases.
+
+        Args:
+            phase_name: Single phase to run (consolidation, problem_reevaluation,
+                       invention, or dream_log)
+            memory_count: How many facts to retrieve
+            connection_target: How many connections to request (invention phase)
+            **kwargs: Additional parameters for specific phases (e.g., topic)
+
+        Returns:
+            The DreamSession with this phase's output
+        """
+        if phase_name not in self.PHASE_PROMPTS:
+            raise ValueError(f"Unknown phase: {phase_name}")
+
+        if not self._session:
+            self.start_session()
+
+        s = self._session
+        self._cognitive_budget = self._apply_cognitive_budget()
+
+        try:
+            self._run_phase(phase_name, memory_count=memory_count,
+                            connection_target=connection_target, **kwargs)
+            self._session.state_on_exit = "single_phase"
+        except Exception as e:
+            s.errors.append(str(e))
+            logger.exception("single phase error")
+
+        return s
+
+    def run_composed(self, phase_list: list[str], memory_count: int = 150,
+                     connection_target: int = 7) -> DreamSession:
+        """Execute a custom sequence of dream phases.
+
+        Unlike run_all_phases(), this allows arbitrary phase composition.
+        Phases are run in order, with dream_log always added at the end
+        if not already present.
+
+        Args:
+            phase_list: Ordered list of phases to run
+            memory_count: How many facts to retrieve
+            connection_target: How many connections to request
+
+        Returns:
+            The DreamSession with all phase outputs
+        """
+        if not self._session:
+            self.start_session()
+
+        s = self._session
+        self._cognitive_budget = self._apply_cognitive_budget()
+
+        # Ensure dream_log runs last if not specified
+        phases = list(phase_list)
+        if "dream_log" not in phases:
+            phases.append("dream_log")
+
+        try:
+            for phase_name in phases:
+                if self._interrupted and phase_name != "dream_log":
+                    s.errors.append(f"{phase_name}: interrupted before start")
+                    continue
+                self._run_phase(phase_name, memory_count=memory_count,
+                                  connection_target=connection_target)
+        except Exception as e:
+            s.errors.append(str(e))
+            logger.exception("composed session error")
+        finally:
+            self._finalize_session()
+
+        return s
+
+    def _check_phase_skip_conditions(self, phase_name: str) -> tuple[bool, str]:
+        """Check if a phase should be skipped based on current state.
+
+        Returns:
+            Tuple of (should_skip, reason) - skips if conditions indicate
+            no work is needed for that phase.
+        """
+        if phase_name == "consolidation":
+            # Skip if no facts to consolidate
+            facts = self._read_facts_from_db(limit=10)
+            if not facts:
+                return True, "no facts to consolidate"
+            # Skip if all facts are recently reviewed
+            stale_facts = [f for f in facts
+                          if f.get("updated_at", "") < "recent"]
+            if len(stale_facts) < 5:
+                return True, "recent consolidation complete"
+
+        elif phase_name == "problem_reevaluation":
+            # Skip if no dream_action items pending
+            pass  # Always run for fresh perspective
+
+        elif phase_name == "invention":
+            # Skip if low context richness
+            if self._cognitive_budget.get("skip_invention", False):
+                return True, "context too thin"
+
+        return False, ""
+
     def _run_phase(self, phase_name: str, memory_count: int = 150,
                     connection_target: int = 7) -> None:
         """Execute a single dream phase via LLM.
@@ -690,16 +791,13 @@ IMPORTANT: Output at least one item per category if any exist.
             stored = 0
             filtered = 0
 
-            # Helper to compute trust using trust_scoring module
+            # Helper to normalize significance (1-5 scale -> 0-1 scale) and compute trust
             def compute_trust(significance: int) -> float:
-                if trust_scoring is not None:
-                    return trust_scoring.compute_source_trust(
-                        significance=significance / 5.0,
-                        source="dream_hypothesis",
-                        verification="dream_hypothesis",
-                    )
-                # Fallback: use simple formula when trust_scoring unavailable
-                return 0.6 + significance * 0.05
+                return trust_scoring.compute_source_trust(
+                    significance=significance / 5.0,
+                    source="dream_hypothesis",
+                    verification="dream_hypothesis",
+                )
 
             if phase_name == "consolidation":
                 for c in result.get("connections", []):
@@ -773,8 +871,7 @@ IMPORTANT: Output at least one item per category if any exist.
                             content += f" — {notes}"
                         trust = compute_trust(sig_val)
                         self._insert_fact(conn, content, "dream",
-                                          f"dream_idea,dream_{session_id},{potential}",
-                                          trust=trust)
+                                          f"dream_idea,dream_{session_id},{potential}", trust=trust)
                         stored += 1
                 for c in result.get("connections_made", []):
                     if not self._significant(c, MIN_SIGNIFICANCE):
@@ -815,8 +912,7 @@ IMPORTANT: Output at least one item per category if any exist.
                     content = f"[Dream {session_id} action:solve] {text}"
                     trust = compute_trust(sig_val)
                     self._insert_fact(conn, content, "dream_action",
-                                      f"dream_solve_it,dream_{session_id}",
-                                      trust=trust)
+                                      f"dream_solve_it,dream_{session_id}", trust=trust)
                     stored += 1
                 for item in action_plan.get("escalate", []):
                     sig_val = item.get("significance", 5) if isinstance(item, dict) else 5
@@ -824,8 +920,7 @@ IMPORTANT: Output at least one item per category if any exist.
                     content = f"[Dream {session_id} action:escalate] {text}"
                     trust = compute_trust(sig_val)
                     self._insert_fact(conn, content, "dream_action",
-                                      f"dream_escalate,dream_{session_id},high_priority",
-                                      trust=trust)
+                                      f"dream_escalate,dream_{session_id},high_priority", trust=trust)
                     stored += 1
                 # defer items — no significance needed, just store
                 for item in action_plan.get("defer", []):
@@ -864,11 +959,7 @@ IMPORTANT: Output at least one item per category if any exist.
         source_context: str = "dream_hypothesis",
         verification_status: str = "dream_hypothesis",
     ) -> None:
-        """Insert a fact into the holographic memory, skipping duplicates.
-        
-        Dream-generated facts are tagged with source_context='dream_hypothesis' and
-        verification_status='dream_hypothesis' to distinguish them from real-time facts.
-        """
+        """Insert a fact into the holographic memory, skipping duplicates."""
         try:
             conn.execute(
                 "INSERT OR IGNORE INTO facts (content, category, tags, trust_score, source_context, verification_status) VALUES (?, ?, ?, ?, ?, ?)",

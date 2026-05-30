@@ -18,7 +18,20 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Import trust_scoring from hermes-agent's holographic memory plugin
+# This enables source-aware trust computation for dream-generated facts
+import sys
+_hermes_agent_path = Path.home() / ".hermes" / "hermes-agent"
+if str(_hermes_agent_path) not in sys.path:
+    sys.path.insert(0, str(_hermes_agent_path))
+
 logger = logging.getLogger(__name__)
+
+try:
+    from plugins.memory.holographic import trust_scoring
+except ImportError:
+    # Fallback: trust_scoring may be bundled with the plugin
+    trust_scoring = None  # type: ignore[assignment]
 
 
 class DreamSession:
@@ -677,6 +690,17 @@ IMPORTANT: Output at least one item per category if any exist.
             stored = 0
             filtered = 0
 
+            # Helper to compute trust using trust_scoring module
+            def compute_trust(significance: int) -> float:
+                if trust_scoring is not None:
+                    return trust_scoring.compute_source_trust(
+                        significance=significance / 5.0,
+                        source="dream_hypothesis",
+                        verification="dream_hypothesis",
+                    )
+                # Fallback: use simple formula when trust_scoring unavailable
+                return 0.6 + significance * 0.05
+
             if phase_name == "consolidation":
                 for c in result.get("connections", []):
                     if not self._significant(c, MIN_SIGNIFICANCE):
@@ -686,8 +710,9 @@ IMPORTANT: Output at least one item per category if any exist.
                     if insight:
                         sig = c.get("significance", 4)
                         content = f"[Dream {session_id} consolidation] {insight}"
+                        trust = compute_trust(sig)
                         self._insert_fact(conn, content, "dream",
-                                          f"dream_consolidated,dream_{session_id}", trust=0.6 + sig * 0.05)
+                                          f"dream_consolidated,dream_{session_id}", trust=trust)
                         stored += 1
                 for c in result.get("contradictions", []):
                     if not self._significant(c, MIN_SIGNIFICANCE):
@@ -697,8 +722,9 @@ IMPORTANT: Output at least one item per category if any exist.
                     if resolution:
                         sig = c.get("significance", 4)
                         content = f"[Dream {session_id} consolidation] Resolved: {resolution}"
+                        trust = compute_trust(sig)
                         self._insert_fact(conn, content, "dream",
-                                          f"dream_consolidated,dream_{session_id}", trust=0.6 + sig * 0.05)
+                                          f"dream_consolidated,dream_{session_id}", trust=trust)
                         stored += 1
 
             elif phase_name == "problem_reevaluation":
@@ -709,8 +735,9 @@ IMPORTANT: Output at least one item per category if any exist.
                     text = sol if isinstance(sol, str) else sol.get("item", str(sol))
                     sig_val = sol.get("significance", 4) if isinstance(sol, dict) else 4
                     content = f"[Dream {session_id} re-evaluation] {text}"
+                    trust = compute_trust(sig_val)
                     self._insert_fact(conn, content, "dream",
-                                      f"dream_solution,dream_{session_id}", trust=0.6 + sig_val * 0.05)
+                                      f"dream_solution,dream_{session_id}", trust=trust)
                     stored += 1
                 for r in result.get("reconsidered", []):
                     if not self._significant(r, MIN_SIGNIFICANCE):
@@ -723,8 +750,9 @@ IMPORTANT: Output at least one item per category if any exist.
                         content = f"[Dream {session_id} re-evaluation] New perspective: {perspective}"
                         if resolution:
                             content += f" — Resolution: {resolution}"
+                        trust = compute_trust(sig_val)
                         self._insert_fact(conn, content, "dream",
-                                          f"dream_insight,dream_{session_id}", trust=0.6 + sig_val * 0.05)
+                                          f"dream_insight,dream_{session_id}", trust=trust)
                         stored += 1
 
             elif phase_name == "invention":
@@ -743,9 +771,10 @@ IMPORTANT: Output at least one item per category if any exist.
                             content += f" [Potential: {potential}]"
                         if notes:
                             content += f" — {notes}"
+                        trust = compute_trust(sig_val)
                         self._insert_fact(conn, content, "dream",
                                           f"dream_idea,dream_{session_id},{potential}",
-                                          trust=0.6 + sig_val * 0.05)
+                                          trust=trust)
                         stored += 1
                 for c in result.get("connections_made", []):
                     if not self._significant(c, MIN_SIGNIFICANCE):
@@ -755,8 +784,9 @@ IMPORTANT: Output at least one item per category if any exist.
                     if link:
                         sig_val = c.get("significance", 4)
                         content = f"[Dream {session_id} invention] Connection: {link}"
+                        trust = compute_trust(sig_val)
                         self._insert_fact(conn, content, "dream",
-                                          f"dream_idea,dream_{session_id}", trust=0.6 + sig_val * 0.05)
+                                          f"dream_idea,dream_{session_id}", trust=trust)
                         stored += 1
 
             elif phase_name == "dream_log":
@@ -764,14 +794,16 @@ IMPORTANT: Output at least one item per category if any exist.
                 key_insight = result.get("key_insight", "")
                 if key_insight:
                     content = f"[Dream {session_id} revelation] {key_insight}"
+                    trust = compute_trust(5)  # Key insight gets max significance
                     self._insert_fact(conn, content, "dream",
-                                      f"dream_revelation,dream_{session_id}", trust=0.85)
+                                      f"dream_revelation,dream_{session_id}", trust=trust)
                     stored += 1
                 synthesis = result.get("synthesis", "") or result.get("synmthesis", "")
                 if synthesis:
                     content = f"[Dream {session_id} synthesis] {synthesis}"
+                    trust = compute_trust(4)  # Synthesis gets high significance
                     self._insert_fact(conn, content, "dream",
-                                      f"dream_revelation,dream_{session_id}", trust=0.8)
+                                      f"dream_revelation,dream_{session_id}", trust=trust)
                     stored += 1
                 # Action plan — store ALL actionable items regardless of significance
                 # Low-significance issues should still be solved quietly or escalated;
@@ -781,23 +813,26 @@ IMPORTANT: Output at least one item per category if any exist.
                     sig_val = item.get("significance", 3) if isinstance(item, dict) else 3
                     text = item.get("item", str(item)) if isinstance(item, dict) else str(item)
                     content = f"[Dream {session_id} action:solve] {text}"
+                    trust = compute_trust(sig_val)
                     self._insert_fact(conn, content, "dream_action",
                                       f"dream_solve_it,dream_{session_id}",
-                                      trust=0.6 + sig_val * 0.05)
+                                      trust=trust)
                     stored += 1
                 for item in action_plan.get("escalate", []):
                     sig_val = item.get("significance", 5) if isinstance(item, dict) else 5
                     text = item.get("item", str(item)) if isinstance(item, dict) else str(item)
                     content = f"[Dream {session_id} action:escalate] {text}"
+                    trust = compute_trust(sig_val)
                     self._insert_fact(conn, content, "dream_action",
                                       f"dream_escalate,dream_{session_id},high_priority",
-                                      trust=0.6 + sig_val * 0.05)
+                                      trust=trust)
                     stored += 1
                 # defer items — no significance needed, just store
                 for item in action_plan.get("defer", []):
                     content = f"[Dream {session_id} action:defer] {item}"
+                    trust = compute_trust(3)  # Defer items get moderate significance
                     self._insert_fact(conn, content, "dream_action",
-                                      f"dream_defer,dream_{session_id}", trust=0.65)
+                                      f"dream_defer,dream_{session_id}", trust=trust)
                     stored += 1
 
             conn.close()
@@ -820,12 +855,24 @@ IMPORTANT: Output at least one item per category if any exist.
         return None
 
     @staticmethod
-    def _insert_fact(conn, content: str, category: str, tags: str, trust: float = 0.7) -> None:
-        """Insert a fact into the holographic memory, skipping duplicates."""
+    def _insert_fact(
+        conn,
+        content: str,
+        category: str,
+        tags: str,
+        trust: float = 0.7,
+        source_context: str = "dream_hypothesis",
+        verification_status: str = "dream_hypothesis",
+    ) -> None:
+        """Insert a fact into the holographic memory, skipping duplicates.
+        
+        Dream-generated facts are tagged with source_context='dream_hypothesis' and
+        verification_status='dream_hypothesis' to distinguish them from real-time facts.
+        """
         try:
             conn.execute(
-                "INSERT OR IGNORE INTO facts (content, category, tags, trust_score) VALUES (?, ?, ?, ?)",
-                (content, category, tags, trust),
+                "INSERT OR IGNORE INTO facts (content, category, tags, trust_score, source_context, verification_status) VALUES (?, ?, ?, ?, ?, ?)",
+                (content, category, tags, trust, source_context, verification_status),
             )
             conn.commit()
         except Exception:

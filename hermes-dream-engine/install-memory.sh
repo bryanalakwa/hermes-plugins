@@ -138,96 +138,127 @@ step "3" "Initializing holographic fact store"
 
 DB_PATH="$HERMES_HOME/memory_store.db"
 
-if [ -f "$DB_PATH" ]; then
-  ok "Holographic DB already exists at ${DB_PATH}"
-else
-  info "Creating holographic fact store..."
-  "$VENV_PYTHON" << 'PYEOF'
+info "Setting up holographic memory schema..."
+"$VENV_PYTHON" << 'PYEOF'
 import sqlite3
 import sys
 from pathlib import Path
 
+# Try to import the authoritative schema from hermes-agent
 db_path = Path.home() / ".hermes" / "memory_store.db"
 db_path.parent.mkdir(parents=True, exist_ok=True)
 
-conn = sqlite3.connect(str(db_path))
-conn.execute("PRAGMA journal_mode=WAL")
-conn.execute("PRAGMA synchronous=NORMAL")
+# Check if DB exists and what schema version it has
+needs_migration = False
+needs_created = not db_path.exists()
 
-# Facts table — the core of the holographic store
-conn.execute("""
-    CREATE TABLE IF NOT EXISTS facts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        content TEXT NOT NULL UNIQUE,
-        category TEXT DEFAULT 'general',
-        tags TEXT DEFAULT '',
-        trust_score REAL DEFAULT 0.5,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        access_count INTEGER DEFAULT 0,
-        last_accessed TIMESTAMP
-    )
-""")
+if db_path.exists():
+    conn = sqlite3.connect(str(db_path))
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(facts)").fetchall()}
+    # Detect old schema: uses 'id' instead of 'fact_id'
+    if 'id' in columns and 'fact_id' not in columns:
+        info = "old"
+        needs_migration = True
+        print("Schema migration needed: old schema detected (id column)")
+    elif 'fact_id' in columns:
+        info = "current"
+        print("Schema: already using current schema")
+    else:
+        info = "unknown"
+        print("Schema: unknown variant, will apply authoritative schema")
+    conn.close()
+else:
+    info = "creating"
+    print("Creating fresh memory_store.db")
 
-# FTS5 virtual table for full-text search
-conn.execute("""
-    CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
-        content,
-        tags,
-        content=facts,
-        content_rowid=id
-    )
-""")
+# Try to use authoritative store.py schema
+try:
+    store_path = Path.home() / ".hermes" / "hermes-agent" / "plugins" / "memory" / "holographic" / "store.py"
+    if store_path.exists():
+        # Import the schema constant
+        sys.path.insert(0, str(store_path.parent.parent.parent.parent))
+        from plugins.memory.holographic.store import _SCHEMA, MemoryStore
+        print("Using authoritative schema from store.py")
+        
+        # Initialize via MemoryStore (handles WAL, schema creation, and migration)
+        store = MemoryStore(db_path=str(db_path))
+        store.close()
+        print(f"Database initialized via MemoryStore: {db_path}")
+    else:
+        raise ImportError("store.py not found")
+except ImportError:
+    print("Falling back to inline schema creation")
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    # Minimal inline schema (fallback when hermes-agent not available)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS facts (
+            fact_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL UNIQUE,
+            category TEXT DEFAULT 'general',
+            tags TEXT DEFAULT '',
+            trust_score REAL DEFAULT 0.5,
+            retrieval_count INTEGER DEFAULT 0,
+            helpful_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            hrr_vector BLOB,
+            source_context TEXT DEFAULT 'realtime',
+            verification_status TEXT DEFAULT 'verified'
+        );
 
-# Triggers to keep FTS index in sync
-conn.execute("""
-    CREATE TRIGGER IF NOT EXISTS facts_ai AFTER INSERT ON facts BEGIN
-        INSERT INTO facts_fts(rowid, content, tags) VALUES (new.id, new.content, new.tags);
-    END
-""")
+        CREATE TABLE IF NOT EXISTS entities (
+            entity_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            entity_type TEXT DEFAULT 'unknown',
+            aliases TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
 
-conn.execute("""
-    CREATE TRIGGER IF NOT EXISTS facts_ad AFTER DELETE ON facts BEGIN
-        INSERT INTO facts_fts(facts_fts, rowid, content, tags) VALUES('delete', old.id, old.content, old.tags);
-    END
-""")
+        CREATE TABLE IF NOT EXISTS fact_entities (
+            fact_id INTEGER REFERENCES facts(fact_id),
+            entity_id INTEGER REFERENCES entities(entity_id),
+            PRIMARY KEY (fact_id, entity_id)
+        );
 
-conn.execute("""
-    CREATE TRIGGER IF NOT EXISTS facts_au AFTER UPDATE ON facts BEGIN
-        INSERT INTO facts_fts(facts_fts, rowid, content, tags) VALUES('delete', old.id, old.content, old.tags);
-        INSERT INTO facts_fts(rowid, content, tags) VALUES (new.id, new.content, new.tags);
-    END
-""")
+        CREATE INDEX IF NOT EXISTS idx_facts_trust ON facts(trust_score DESC);
+        CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category);
+        CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
 
-# Entity index for fast entity-based retrieval
-conn.execute("""
-    CREATE TABLE IF NOT EXISTS entities (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        entity_type TEXT DEFAULT 'general',
-        fact_id INTEGER REFERENCES facts(id),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-""")
+        CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts
+            USING fts5(content, tags, content=facts, content_rowid=fact_id);
 
-conn.execute("""
-    CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)
-""")
+        CREATE TRIGGER IF NOT EXISTS facts_ai AFTER INSERT ON facts BEGIN
+            INSERT INTO facts_fts(rowid, content, tags)
+                VALUES (new.fact_id, new.content, new.tags);
+        END;
 
-conn.execute("""
-    CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category)
-""")
+        CREATE TRIGGER IF NOT EXISTS facts_ad AFTER DELETE ON facts BEGIN
+            INSERT INTO facts_fts(facts_fts, rowid, content, tags)
+                VALUES ('delete', old.fact_id, old.content, old.tags);
+        END;
 
-conn.execute("""
-    CREATE INDEX IF NOT EXISTS idx_facts_trust ON facts(trust_score)
-""")
+        CREATE TRIGGER IF NOT EXISTS facts_au AFTER UPDATE ON facts BEGIN
+            INSERT INTO facts_fts(facts_fts, rowid, content, tags)
+                VALUES ('delete', old.fact_id, old.content, old.tags);
+            INSERT INTO facts_fts(rowid, content, tags)
+                VALUES (new.fact_id, new.content, new.tags);
+        END;
 
-conn.commit()
-conn.close()
-print(f"Created holographic fact store at {db_path}")
+        CREATE TABLE IF NOT EXISTS memory_banks (
+            bank_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bank_name TEXT NOT NULL UNIQUE,
+            vector BLOB NOT NULL,
+            dim INTEGER NOT NULL,
+            fact_count INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+    conn.commit()
+    conn.close()
+    print(f"Database created with inline schema: {db_path}")
 PYEOF
-  ok "Holographic fact store created at ${DB_PATH}"
-fi
 
 # ══════════════════════════════════════════════════════════
 # STEP 4: Configure config.yaml
@@ -336,7 +367,7 @@ cursor = conn.cursor()
 # Check tables
 cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
 tables = {row[0] for row in cursor.fetchall()}
-required = {"facts", "facts_fts", "entities"}
+required = {"facts", "facts_fts", "entities", "fact_entities", "memory_banks"}
 missing = required - tables
 if missing:
     print(f"FAIL: Missing tables: {missing}")
@@ -352,6 +383,16 @@ print(f"OK: FTS index has {fts_count} entries")
 cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'")
 indexes = [row[0] for row in cursor.fetchall()]
 print(f"OK: Indexes: {', '.join(indexes)}")
+
+# Check new columns (source_context, verification_status)
+columns = {row[1] for row in cursor.execute("PRAGMA table_info(facts)").fetchall()}
+required_cols = {"fact_id", "content", "source_context", "verification_status"}
+missing_cols = required_cols - columns
+if missing_cols:
+    print(f"WARN: Missing trust-scoring columns: {missing_cols}")
+    print("  These will be added on next access or run migration manually.")
+else:
+    print("OK: All trust-scoring columns present (source_context, verification_status)")
 
 conn.close()
 VERIFYEOF
